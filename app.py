@@ -3,7 +3,6 @@ import pdfplumber
 import pandas as pd
 import re
 import io
-import uuid
 
 # ✅ Master categorization file URL
 MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1I_Fz3slHP1mnfsKKgAFl54tKvqlo65Ug/export?format=xlsx"
@@ -17,7 +16,7 @@ if "converted_df" not in st.session_state:
 if "auto_categorize" not in st.session_state:
     st.session_state["auto_categorize"] = False
 if "active_tab" not in st.session_state:
-    st.session_state["active_tab"] = "converter"  # Default to converter
+    st.session_state["active_tab"] = "converter"  # Default tab
 
 # 🔄 Reset function
 def reset_app():
@@ -67,18 +66,16 @@ def categorize_statement(df, master_df):
     )
     return df
 
-# 🚀 Tab navigation function
+# 🚀 Switch tab function
 def switch_to_tab(tab_name):
     st.session_state["active_tab"] = tab_name
 
 # -------------------- 🗂️ Tabs --------------------
 tab_labels = ["📄 PDF to Excel Converter", "📂 Categorization Pilot"]
-active_index = 0 if st.session_state["active_tab"] == "converter" else 1
 tabs = st.tabs(tab_labels)
-converter_tab, categorization_tab = tabs
 
 # -------------------- 📄 PDF to Excel Converter --------------------
-with converter_tab:
+with tabs[0]:
     if st.session_state["active_tab"] == "converter":
         st.header("📄 PDF to Excel Converter")
 
@@ -112,21 +109,16 @@ with converter_tab:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
-                # Button to categorize converted statement
+                # Button to auto-categorize in the next tab
                 if st.button("➡️ Categorize Converted Statement"):
                     st.session_state["converted_df"] = df
                     st.session_state["auto_categorize"] = True
                     switch_to_tab("categorization")
 
 # -------------------- 📂 Categorization Pilot --------------------
-with categorization_tab:
+with tabs[1]:
     if st.session_state["active_tab"] == "categorization":
         st.header("📂 Categorization Pilot")
-
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            if st.button("🔄 Reset"):
-                reset_app()
 
         master_df = load_master_file()
         if master_df.empty:
@@ -150,38 +142,37 @@ with categorization_tab:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
-                # ✅ Reset auto-categorize after displaying
+                # Reset auto-categorize flag
                 st.session_state["auto_categorize"] = False
 
-            else:
-                st.markdown("### 📂 Upload files for independent categorization:")
-                uploaded_files = st.file_uploader(
-                    "📤 Upload Statement Files (Excel or CSV)",
-                    type=["xlsx", "csv"],
-                    accept_multiple_files=True
-                )
+            st.markdown("### 📂 Or upload files manually for categorization:")
+            uploaded_files = st.file_uploader(
+                "📤 Upload Statement Files (Excel or CSV)",
+                type=["xlsx", "csv"],
+                accept_multiple_files=True
+            )
 
-                if uploaded_files:
-                    for file in uploaded_files:
-                        st.subheader(f"📄 {file.name}")
-                        try:
-                            statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
-                            st.dataframe(statement_df.head(), use_container_width=True)
-                            categorized_df = categorize_statement(statement_df, master_df)
-                            st.success(f"✅ {file.name} categorized successfully!")
-                            st.dataframe(categorized_df.head(), use_container_width=True)
+            if uploaded_files:
+                for file in uploaded_files:
+                    st.subheader(f"📄 {file.name}")
+                    try:
+                        statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+                        st.dataframe(statement_df.head(), use_container_width=True)
+                        categorized_df = categorize_statement(statement_df, master_df)
+                        st.success(f"✅ {file.name} categorized successfully!")
+                        st.dataframe(categorized_df.head(), use_container_width=True)
 
-                            # ✅ Download categorized file
-                            buffer = io.BytesIO()
-                            categorized_df.to_excel(buffer, index=False)
-                            buffer.seek(0)
-                            st.download_button(
-                                label=f"📥 Download {file.name}",
-                                data=buffer,
-                                file_name=f"Categorized_{file.name}",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-                        except Exception as e:
-                            st.error(f"⚠️ Error processing {file.name}: {e}")
-                else:
-                    st.info("👆 Upload files or use the **PDF to Excel Converter** to auto-categorize converted statements.")
+                        # ✅ Download categorized file
+                        buffer = io.BytesIO()
+                        categorized_df.to_excel(buffer, index=False)
+                        buffer.seek(0)
+                        st.download_button(
+                            label=f"📥 Download {file.name}",
+                            data=buffer,
+                            file_name=f"Categorized_{file.name}",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    except Exception as e:
+                        st.error(f"⚠️ Error processing {file.name}: {e}")
+            elif not st.session_state["auto_categorize"]:
+                st.info("👆 Upload files or use the **PDF to Excel Converter** to auto-categorize converted statements.")
