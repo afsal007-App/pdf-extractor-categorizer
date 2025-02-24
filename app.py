@@ -119,13 +119,23 @@ with tab1:
 with tab2:
     st.header("Categorization Pilot")
 
-    # ✅ Use the converted DataFrame from session_state if available and user opted to categorize
+    # ✅ Use converted data if available and the user opted to categorize
     if st.session_state.get("converted_df") is not None and st.session_state.get("proceed_to_categorization"):
         st.success("✅ Using the converted data from PDF to Excel Converter!")
         df_to_categorize = st.session_state["converted_df"]
+    else:
+        st.info("ℹ️ No converted data detected. Upload an Excel file to categorize:")
+        uploaded_file = st.file_uploader("📤 Upload Excel file for categorization", type=["xlsx"])
+        if uploaded_file:
+            df_to_categorize = pd.read_excel(uploaded_file)
+            st.success("✅ Excel file uploaded successfully.")
+        else:
+            df_to_categorize = None
+
+    # 📝 If DataFrame is available, show categorization options
+    if df_to_categorize is not None:
         st.dataframe(df_to_categorize, use_container_width=True)
 
-        # Example categorization option (can be extended as needed)
         st.subheader("📂 Apply Categorization Rules")
         category_column = st.selectbox("Select column to categorize:", df_to_categorize.columns)
         new_category = st.text_input("Enter new category name:")
@@ -134,4 +144,4 @@ with tab2:
             st.success(f"✅ Category '{new_category}' applied to all rows!")
             st.dataframe(df_to_categorize, use_container_width=True)
     else:
-        st.warning("⚠️ No converted data found or 'Proceed to Categorization' not selected. Please convert data first.")
+        st.warning("⚠️ Please upload an Excel file or convert a PDF to proceed with categorization.")
