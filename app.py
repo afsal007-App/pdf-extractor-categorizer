@@ -1,59 +1,27 @@
-
----
-
-### 🖥️ **Step 3: Create `app.py`** *(Main Application Code)*
-
-```python
 import streamlit as st
 import pdfplumber
 import pandas as pd
 import io
 import re
 
-# ✅ Master categorization file URL (replace with your Google Sheet link)
-MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1I_Fz3slHP1mnfsKKgAFl54tKvqlo65Ug/export?format=xlsx"
+# Streamlit page setup
+st.set_page_config(page_title="📄 PDF to Excel Converter & Categorizer", layout="centered")
 
-# 🌟 Page Configuration
-st.set_page_config(page_title="📄 Extract & Categorize Statements", layout="wide")
+st.title("📄 PDF to Excel Converter & Categorizer")
+st.write(
+    "Upload PDF statements to get a consolidated Excel with:\n"
+    "- Extracted running balance.\n"
+    "- Newly calculated balance column.\n"
+    "- Bank-specific extraction logic.\n"
+    "- Option to categorize transactions."
+)
 
-# 🏷️ App Title
-st.title("📄 PDF Extractor & 📊 Transaction Categorizer")
+# ✅ Bank selection
+bank_options = ["Wio Bank", "Other Bank (Coming Soon)"]
+selected_bank = st.selectbox("🏦 Select Bank:", bank_options)
 
-# 🚀 Utility Functions
-def clean_text(text):
-    """Standardize text for keyword matching."""
-    return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
-
-def load_master_file():
-    """Load master categorization file."""
-    try:
-        df = pd.read_excel(MASTER_SHEET_URL)
-        df['Key Word'] = df['Key Word'].astype(str).apply(clean_text)
-        return df
-    except Exception as e:
-        st.error(f"⚠️ Error loading master file: {e}")
-        return pd.DataFrame()
-
-def find_description_column(columns):
-    """Identify the description column."""
-    possible_names = ['description', 'details', 'narration', 'particulars', 'transaction details', 'remarks']
-    return next((col for col in columns if any(name in col.lower() for name in possible_names)), None)
-
-def categorize_description(description, master_df):
-    """Assign category based on keywords."""
-    cleaned = clean_text(description)
-    for _, row in master_df.iterrows():
-        if row['Key Word'] and row['Key Word'] in cleaned:
-            return row['Category']
-    return 'Uncategorized'
-
-def categorize_statement(df, master_df, desc_col):
-    """Categorize all transactions."""
-    df['Categorization'] = df[desc_col].apply(lambda x: categorize_description(x, master_df))
-    return df
-
-def extract_transactions_from_pdf(pdf_file):
-    """Extract transactions from PDFs (Wio Bank format example)."""
+# ✅ Extraction functions
+def extract_wio_transactions(pdf_file):
     transactions = []
     with pdfplumber.open(pdf_file) as pdf:
         for page in pdf.pages:
@@ -82,68 +50,83 @@ def extract_transactions_from_pdf(pdf_file):
                     transactions.append([date, ref_number, description, amount, running_balance])
     return transactions
 
-# 🗂️ Create tabs
-tab1, tab2 = st.tabs(["📄 Extract Statements", "📊 Categorize Transactions"])
+def extract_other_bank_transactions(pdf_file):
+    st.warning("🚧 Extraction logic for this bank is under development.")
+    return []
 
-# 🌟 Tab 1: Extract Statements
-with tab1:
-    st.subheader("Step 1: Upload & Extract PDF Statements")
+# ✅ Extraction dispatcher
+extraction_functions = {
+    "Wio Bank": extract_wio_transactions,
+    "Other Bank (Coming Soon)": extract_other_bank_transactions,
+}
 
-    uploaded_files = st.file_uploader("📤 Upload PDF files", type=["pdf"], accept_multiple_files=True)
-    if uploaded_files:
-        all_transactions = []
-        with st.spinner("🔍 Extracting transactions..."):
-            for file in uploaded_files:
-                transactions = extract_transactions_from_pdf(file)
-                for transaction in transactions:
-                    transaction.append(file.name)
-                all_transactions.extend(transactions)
+# ✅ Upload PDFs
+uploaded_files = st.file_uploader("📤 Upload PDF files", type=["pdf"], accept_multiple_files=True)
 
-        if all_transactions:
-            columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
-            extracted_df = pd.DataFrame(all_transactions, columns=columns)
-            extracted_df["Date"] = pd.to_datetime(extracted_df["Date"], format="%d/%m/%Y", errors='coerce')
-            extracted_df["Amount (Incl. VAT)"] = extracted_df["Amount (Incl. VAT)"].replace({',': ''}, regex=True).astype(float)
+if uploaded_files:
+    all_transactions = []
 
-            st.session_state["extracted_df"] = extracted_df  # Save to session state
+    with st.spinner("🔍 Extracting transactions..."):
+        extraction_function = extraction_functions.get(selected_bank)
+        for file in uploaded_files:
+            transactions = extraction_function(file)
+            for transaction in transactions:
+                transaction.append(file.name)
+            all_transactions.extend(transactions)
 
-            st.success("✅ Transactions extracted!")
-            st.dataframe(extracted_df, use_container_width=True)
-            st.write(f"🔢 **Total Transactions:** {len(extracted_df)}")
-        else:
-            st.warning("⚠️ No transactions found. Check your PDF format.")
+    if all_transactions:
+        columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
+        df = pd.DataFrame(all_transactions, columns=columns)
 
-# 🌟 Tab 2: Categorize Transactions
-with tab2:
-    st.subheader("Step 2: Categorize Extracted Transactions")
+        # Data cleaning
+        df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors='coerce')
+        df["Amount (Incl. VAT)"] = df["Amount (Incl. VAT)"].replace({',': ''}, regex=True).astype(float)
+        df["Running Balance (Extracted)"] = pd.to_numeric(
+            df["Running Balance (Extracted)"].replace({',': ''}, regex=True), errors='coerce'
+        )
 
-    if "extracted_df" in st.session_state:
-        extracted_df = st.session_state["extracted_df"]
+        # Sort and calculate new balance
+        df = df.dropna(subset=["Date"]).sort_values(by="Date").reset_index(drop=True)
+        opening_balance = st.number_input("💰 Enter Opening Balance:", value=0.0, step=0.01)
+        df["Calculated Balance"] = opening_balance + df["Amount (Incl. VAT)"].cumsum()
 
-        with st.spinner('🚀 Loading categorization rules...'):
-            master_df = load_master_file()
+        st.success("✅ Transactions extracted successfully!")
+        st.dataframe(df, use_container_width=True)
+        st.write(f"🔢 **Total Transactions:** {len(df)}")
 
-        if not master_df.empty:
-            desc_col = find_description_column(extracted_df.columns)
-            if desc_col:
-                categorized_df = categorize_statement(extracted_df.copy(), master_df, desc_col)
-                st.success("✅ Transactions categorized!")
-                st.dataframe(categorized_df, use_container_width=True)
-                st.write(f"🔢 **Total Categorized Transactions:** {len(categorized_df)}")
+        # ✅ Download extracted data
+        output = io.BytesIO()
+        df.to_excel(output, index=False, engine='openpyxl')
+        output.seek(0)
 
-                # Download button
-                output = io.BytesIO()
-                categorized_df.to_excel(output, index=False)
-                output.seek(0)
-                st.download_button(
-                    label="📥 Download Categorized Transactions",
-                    data=output,
-                    file_name="categorized_transactions.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                st.error("⚠️ No description column found.")
-        else:
-            st.error("⚠️ Could not load the master categorization file.")
+        st.download_button(
+            label="📥 Download Consolidated Excel (With Balances)",
+            data=output,
+            file_name="consolidated_transactions_with_balances.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        # ✅ Categorization options
+        st.markdown("---")
+        st.subheader("📊 Next Step: Categorize Transactions")
+
+        if st.button("🔄 Categorize Now (In This App)"):
+            # Placeholder for in-app categorization logic
+            st.info("🚀 Categorizing transactions...")
+            # Simulate categorization (replace with actual logic or call to another function)
+            df["Category"] = df["Description"].apply(lambda x: "Income" if "salary" in x.lower() else "Expense")
+            st.success("✅ Transactions categorized!")
+            st.dataframe(df, use_container_width=True)
+            st.download_button(
+                label="📥 Download Categorized Transactions",
+                data=output,
+                file_name="categorized_transactions.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+        # ✅ External app redirection
+        external_categorization_url = "https://your-streamlit-app-link.com"
+        if st.button("🌐 Go to Categorization App"):
+            st.markdown(f"[👉 Click here to open the Categorization App]({external_categorization_url})", unsafe_allow_html=True)
     else:
-        st.warning("⚠️ Extract statements first in the 'Extract Statements' tab.")
+        st.warning("⚠️ No transactions found. Please check the PDF format or selected bank.")
