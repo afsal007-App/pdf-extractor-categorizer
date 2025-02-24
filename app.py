@@ -98,7 +98,7 @@ with tabs[0]:
             if st.button("➡️ Categorize Converted Statement"):
                 st.session_state["converted_df"] = df
                 st.session_state["auto_categorize"] = True
-                st.experimental_rerun()
+                st.rerun()
 
 # -------------------- 📂 Categorization Pilot --------------------
 with tabs[1]:
