@@ -37,7 +37,7 @@ def reset_app():
     st.session_state.pop("converted_df", None)
     st.session_state.pop("proceed_to_categorization", None)
     st.session_state.pop("categorized_df", None)
-    st.experimental_set_query_params(tab='converter')
+    st.query_params.clear()
     st.rerun()
 
 # 🧹 Helper functions
@@ -70,13 +70,12 @@ def categorize_statement(statement_df, master_df, desc_col):
 
 # 🚀 Function to switch to Categorization tab
 def switch_to_categorization_tab():
-    st.experimental_set_query_params(tab='categorization')
+    st.query_params['tab'] = 'categorization'
     st.session_state['switch_to_categorization'] = True
-    st.experimental_rerun()
+    st.rerun()
 
 # 🗂️ Tabs with query parameter for navigation
-query_params = st.experimental_get_query_params()
-default_tab = query_params.get('tab', ['converter'])[0]
+default_tab = st.query_params.get('tab', 'converter')
 
 tab1, tab2 = st.tabs(["📄 PDF to Excel Converter", "📂 Categorization Pilot"])
 
@@ -157,8 +156,7 @@ with tab1:
                 )
 
                 st.session_state["converted_df"] = df
-                proceed = st.checkbox('➡️ Proceed to Categorization')
-                if proceed:
+                if st.button('➡️ Proceed to Categorization'):
                     st.session_state["proceed_to_categorization"] = True
                     switch_to_categorization_tab()
 
