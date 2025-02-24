@@ -1,9 +1,13 @@
-
 import streamlit as st
 import pdfplumber
 import pandas as pd
 import io
 import re
+import uuid
+import zipfile
+
+# ✅ Master categorization file URL
+MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1I_Fz3slHP1mnfsKKgAFl54tKvqlo65Ug/export?format=xlsx"
 
 # ✅ Set page configuration FIRST
 st.set_page_config(
@@ -12,10 +16,60 @@ st.set_page_config(
     page_icon="📊"
 )
 
-st.title("Unified Application")
+# 🎨 Custom CSS for styling
+st.markdown("""
+    <style>
+    [data-testid="stToolbar"] { visibility: hidden !important; }
+    body { background: linear-gradient(135deg, #141e30, #243b55); color: #e0e0e0; font-size: 12px; }
+    .center-title { text-align: center; font-size: 28px; font-weight: 700; margin-bottom: 15px; color: #f1c40f; }
+    .watermark { position: fixed; bottom: 5px; left: 0; right: 0; text-align: center; font-size: 11px; color: rgba(200, 200, 200, 0.7); }
+    </style>
+    <div class="watermark">© 2025 Afsal. All Rights Reserved.</div>
+""", unsafe_allow_html=True)
 
+# 🔄 Initialize session state
+if "uploader_key" not in st.session_state:
+    st.session_state["uploader_key"] = str(uuid.uuid4())
+
+# 🔄 Reset function
+def reset_app():
+    st.session_state["uploader_key"] = str(uuid.uuid4())
+    st.session_state.pop("converted_df", None)
+    st.session_state.pop("proceed_to_categorization", None)
+    st.rerun()
+
+# 🧹 Helper functions
+def load_master_file():
+    try:
+        df = pd.read_excel(MASTER_SHEET_URL)
+        df['Key Word'] = df['Key Word'].astype(str).apply(clean_text)
+        return df
+    except Exception as e:
+        st.error(f'⚠️ Error loading master file: {e}')
+        return pd.DataFrame()
+
+def clean_text(text):
+    return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
+
+def find_description_column(columns):
+    possible = ['description', 'details', 'narration', 'particulars', 'transaction details', 'remarks']
+    return next((col for col in columns if any(name in col.lower() for name in possible)), None)
+
+def categorize_description(description, master_df):
+    cleaned = clean_text(description)
+    for _, row in master_df.iterrows():
+        if row['Key Word'] and row['Key Word'] in cleaned:
+            return row['Category']
+    return 'Uncategorized'
+
+def categorize_statement(statement_df, master_df, desc_col):
+    statement_df['Categorization'] = statement_df[desc_col].apply(lambda x: categorize_description(x, master_df))
+    return statement_df
+
+# 🗂️ Tabs setup
 tab1, tab2 = st.tabs(["📄 PDF to Excel Converter", "📂 Categorization Pilot"])
 
+# -------------------- 📄 PDF to Excel Converter --------------------
 with tab1:
     st.header("PDF to Excel Converter")
 
@@ -42,106 +96,113 @@ with tab1:
                         date = date_match.group(1)
                         remainder = line[len(date):].strip()
                         ref_number_match = re.search(r'(P\d{9})', remainder)
-                        ref_number = ref_number_match.group(1) if ref_number_match else ""
-                        remainder_clean = remainder.replace(ref_number, "").strip() if ref_number else remainder
+                        ref_number = ref_number_match.group(1) if ref_number_match else ''
+                        remainder_clean = remainder.replace(ref_number, '').strip() if ref_number else remainder
                         numbers = re.findall(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', remainder_clean)
                         if len(numbers) >= 2:
                             amount, running_balance = numbers[-2], numbers[-1]
-                            description = remainder_clean.replace(amount, "").replace(running_balance, "").strip()
+                            description = remainder_clean.replace(amount, '').replace(running_balance, '').strip()
                         elif len(numbers) == 1:
                             amount = numbers[0]
-                            running_balance = ""
-                            description = remainder_clean.replace(amount, "").strip()
+                            running_balance = ''
+                            description = remainder_clean.replace(amount, '').strip()
                         else:
                             continue
                         transactions.append([date, ref_number, description, amount, running_balance])
         return transactions
 
-    def extract_other_bank_transactions(pdf_file):
-        st.warning("🚧 Extraction logic for this bank is under development.")
-        return []
-
-    extraction_functions = {
-        "Wio Bank": extract_wio_transactions,
-        "Other Bank (Coming Soon)": extract_other_bank_transactions,
-    }
-
     uploaded_files = st.file_uploader("📤 Upload PDF files", type=["pdf"], accept_multiple_files=True)
 
     if uploaded_files:
         all_transactions = []
-        with st.spinner("🔍 Extracting transactions..."):
-            extraction_function = extraction_functions.get(selected_bank)
+        with st.spinner('🔍 Extracting transactions...'):
             for file in uploaded_files:
-                transactions = extraction_function(file)
+                transactions = extract_wio_transactions(file)
                 for transaction in transactions:
-                    transaction.append(file.name)  # Add source file name
+                    transaction.append(file.name)
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
+            columns = ['Date', 'Ref. Number', 'Description', 'Amount (Incl. VAT)', 'Running Balance (Extracted)', 'Source File']
             df = pd.DataFrame(all_transactions, columns=columns)
-            df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors='coerce')
-            df["Amount (Incl. VAT)"] = df["Amount (Incl. VAT)"].replace({',': ''}, regex=True).astype(float)
-            df["Running Balance (Extracted)"] = pd.to_numeric(
-                df["Running Balance (Extracted)"].replace({',': ''}, regex=True), errors='coerce'
-            )
-            df = df.dropna(subset=["Date"]).sort_values(by="Date").reset_index(drop=True)
-            opening_balance = st.number_input("💰 Enter Opening Balance:", value=0.0, step=0.01)
-            df["Calculated Balance"] = opening_balance + df["Amount (Incl. VAT)"].cumsum()
+            df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors="coerce")
+            df["Amount (Incl. VAT)"] = df["Amount (Incl. VAT)"].replace({",": ""}, regex=True).astype(float)
+            df["Running Balance (Extracted)"] = pd.to_numeric(df["Running Balance (Extracted)"].replace({",": ""}, regex=True), errors="coerce")
+            df = df.dropna(subset=['Date']).sort_values(by='Date').reset_index(drop=True)
 
-            st.success("✅ Transactions extracted with running and calculated balances!")
+            st.success("✅ Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
-            st.write(f"🔢 **Total Transactions:** {len(df)}")
 
-            # ✅ Save DataFrame to session_state for categorization
             st.session_state["converted_df"] = df
-
-            # ✅ Option to proceed to categorization
-            proceed_to_categorization = st.checkbox("➡️ Proceed to Categorization")
-            if proceed_to_categorization:
+            proceed = st.checkbox('➡️ Proceed to Categorization')
+            if proceed:
                 st.session_state["proceed_to_categorization"] = True
-                st.success("✅ You can now switch to the 'Categorization Pilot' tab to categorize this data.")
+                st.success("✅ Switch to the 'Categorization Pilot' tab to continue.")
 
-            output = io.BytesIO()
-            df.to_excel(output, index=False, engine='openpyxl')
-            output.seek(0)
-
-            st.download_button(
-                label="📥 Download Consolidated Excel (With Balances)",
-                data=output,
-                file_name="consolidated_transactions_with_balances.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-        else:
-            st.warning("⚠️ No transactions found. Please check the PDF format or selected bank.")
-
+# -------------------- 📂 Categorization Pilot --------------------
 with tab2:
-    st.header("Categorization Pilot")
+    st.markdown('<h1 class="center-title">🤖 Categorization Bot</h1>', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🔄 Reset"):
+            reset_app()
 
-    # ✅ Use converted data if available and the user opted to categorize
-    if st.session_state.get("converted_df") is not None and st.session_state.get("proceed_to_categorization"):
-        st.success("✅ Using the converted data from PDF to Excel Converter!")
-        df_to_categorize = st.session_state["converted_df"]
+    master_df = load_master_file()
+
+    if master_df.empty:
+        st.error("⚠️ Could not load the master file.")
     else:
-        st.info("ℹ️ No converted data detected. Upload an Excel file to categorize:")
-        uploaded_file = st.file_uploader("📤 Upload Excel file for categorization", type=["xlsx"])
-        if uploaded_file:
-            df_to_categorize = pd.read_excel(uploaded_file)
-            st.success("✅ Excel file uploaded successfully.")
+        df_to_categorize = None
+
+        if st.session_state.get("converted_df") is not None and st.session_state.get("proceed_to_categorization"):
+            st.success("✅ Using converted data from PDF to Excel Converter.")
+            df_to_categorize = st.session_state["converted_df"]
         else:
-            df_to_categorize = None
+            uploaded_files = st.file_uploader(
+                "📂 Upload Statement Files (Excel or CSV)",
+                type=["xlsx", "csv"],
+                accept_multiple_files=True,
+                key=st.session_state["uploader_key"]
+            )
 
-    # 📝 If DataFrame is available, show categorization options
-    if df_to_categorize is not None:
-        st.dataframe(df_to_categorize, use_container_width=True)
+            if uploaded_files:
+                categorized_files = []
+                for file in uploaded_files:
+                    try:
+                        statement_df = pd.read_excel(file) if file.name.endswith('.xlsx') else pd.read_csv(file)
+                        desc_col = find_description_column(statement_df.columns)
+                        if desc_col:
+                            categorized = categorize_statement(statement_df, master_df, desc_col)
+                            st.success(f"✅ {file.name} categorized successfully!")
+                            st.dataframe(categorized.head(), use_container_width=True)
 
-        st.subheader("📂 Apply Categorization Rules")
-        category_column = st.selectbox("Select column to categorize:", df_to_categorize.columns)
-        new_category = st.text_input("Enter new category name:")
-        if st.button("Apply Category"):
-            df_to_categorize["Category"] = new_category
-            st.success(f"✅ Category '{new_category}' applied to all rows!")
-            st.dataframe(df_to_categorize, use_container_width=True)
-    else:
-        st.warning("⚠️ Please upload an Excel file or convert a PDF to proceed with categorization.")
+                            buffer = io.BytesIO()
+                            categorized.to_excel(buffer, index=False)
+                            buffer.seek(0)
+                            categorized_files.append((file.name, buffer))
+
+                            st.download_button(
+                                label=f"📥 Download {file.name}",
+                                data=buffer,
+                                file_name=f"Categorized_{file.name}",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                        else:
+                            st.error(f"⚠️ No description column found in {file.name}.")
+                    except Exception as e:
+                        st.error(f"⚠️ Error processing {file.name}: {e}")
+
+                if categorized_files:
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, 'w') as zipf:
+                        for fname, data in categorized_files:
+                            zipf.writestr(f"Categorized_{fname}", data.getvalue())
+                    zip_buffer.seek(0)
+                    st.download_button(
+                        label="📦 Download All Categorized Files as ZIP",
+                        data=zip_buffer,
+                        file_name="Categorized_Files.zip",
+                        mime="application/zip"
+                    )
+            else:
+                st.info("👆 Upload files to begin.")
