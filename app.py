@@ -102,10 +102,16 @@ with tabs[0]:
                 st.success("✅ Transactions extracted successfully!")
                 st.dataframe(df, use_container_width=True)
 
+                # ✅ Download converted Excel
                 excel_buffer = io.BytesIO()
                 df.to_excel(excel_buffer, index=False)
                 excel_buffer.seek(0)
-                st.download_button("📥 Download Converted Excel", data=excel_buffer, file_name="Converted_Statement.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    "📥 Download Converted Excel",
+                    data=excel_buffer,
+                    file_name="Converted_Statement.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
                 # Store converted data in session state
                 st.session_state["converted_df"] = df
@@ -119,6 +125,7 @@ with tabs[0]:
 with tabs[1]:
     if st.session_state["tab"] == "Categorization Pilot":
         st.header("📂 Categorization Pilot")
+
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
             if st.button("🔄 Reset"):
@@ -135,10 +142,17 @@ with tabs[1]:
                     categorized_df = categorize_statement(df, master_df)
                     st.dataframe(categorized_df, use_container_width=True)
 
-                    # Download categorized file
+                    # ✅ Download categorized Excel
                     buffer = io.BytesIO()
                     categorized_df.to_excel(buffer, index=False)
                     buffer.seek(0)
-                    st.download_button("📥 Download Categorized Excel", data=buffer, file_name="Categorized_Statement.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    st.download_button(
+                        "📥 Download Categorized Excel",
+                        data=buffer,
+                        file_name="Categorized_Statement.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+            else:
+                st.warning("⚠️ Could not load the master categorization file.")
         else:
-            st.info("👆 Please convert a PDF in the previous tab first.")
+            st.info("👆 **No converted data found.** Please convert a PDF in the **PDF to Excel Converter** tab first.")
