@@ -133,6 +133,17 @@ with tab1:
             st.success("✅ Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
 
+            # ✅ Add download button for converted Excel
+            excel_buffer = io.BytesIO()
+            df.to_excel(excel_buffer, index=False)
+            excel_buffer.seek(0)
+            st.download_button(
+                label="📥 Download Converted Excel",
+                data=excel_buffer,
+                file_name="Converted_Statement.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
             st.session_state["converted_df"] = df
             proceed = st.checkbox('➡️ Proceed to Categorization')
             if proceed:
