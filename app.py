@@ -1,16 +1,112 @@
 
 import streamlit as st
+import pdfplumber
+import pandas as pd
+import io
+import re
+
+# ✅ Set page configuration FIRST
+st.set_page_config(
+    page_title="Unified App",
+    layout="wide",
+    page_icon="📊"
+)
 
 st.title("Unified Application")
 
-tab1, tab2 = st.tabs(["PDF to Excel Converter", "Categorization Pilot"])
+tab1, tab2 = st.tabs(["📄 PDF to Excel Converter", "📂 Categorization Pilot"])
 
 with tab1:
     st.header("PDF to Excel Converter")
-    # Code from pdf-to-excel-converter
-    exec('import streamlit as st\nimport pdfplumber\nimport pandas as pd\nimport io\nimport re\n\n# Streamlit page setup\nst.set_page_config(page_title="📄 PDF to Excel Converter", layout="centered")\n\nst.title("📄 PDF to Excel Converter")\nst.write(\n    "Upload PDF statements to get a consolidated Excel with:\\n"\n    "- Extracted running balance from the statement.\\n"\n    "- A newly calculated balance column.\\n"\n    "- Bank-specific extraction logic.\\n"\n)\n\n# Bank selection dropdown\nbank_options = ["Wio Bank", "Other Bank (Coming Soon)"]\nselected_bank = st.selectbox("🏦 Select Bank:", bank_options)\n\n\ndef extract_wio_transactions(pdf_file):\n    """Extraction logic for Wio Bank statements."""\n    transactions = []\n\n    with pdfplumber.open(pdf_file) as pdf:\n        for page in pdf.pages:\n            text = page.extract_text()\n            if not text:\n                continue\n\n            for line in text.strip().split(\'\\n\'):\n                date_match = re.match(r\'(\\d{2}/\\d{2}/\\d{4})\', line)\n                if date_match:\n                    date = date_match.group(1)\n                    remainder = line[len(date):].strip()\n\n                    ref_number_match = re.search(r\'(P\\d{9})\', remainder)\n                    ref_number = ref_number_match.group(1) if ref_number_match else ""\n                    remainder_clean = remainder.replace(ref_number, "").strip() if ref_number else remainder\n\n                    numbers = re.findall(r\'-?\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?\', remainder_clean)\n\n                    if len(numbers) >= 2:\n                        amount, running_balance = numbers[-2], numbers[-1]\n                        description = re.sub(rf\'\\s*{re.escape(amount)}\\s*{re.escape(running_balance)}$\', \'\', remainder_clean).strip()\n                        description = re.sub(rf\'\\s*{re.escape(amount)}$\', \'\', description).strip()\n                        description = re.sub(rf\'\\s*{re.escape(running_balance)}$\', \'\', description).strip()\n                    elif len(numbers) == 1:\n                        amount = numbers[0]\n                        running_balance = ""\n                        description = re.sub(rf\'\\s*{re.escape(amount)}$\', \'\', remainder_clean).strip()\n                    else:\n                        continue\n\n                    transactions.append([date, ref_number, description, amount, running_balance])\n    return transactions\n\n\ndef extract_other_bank_transactions(pdf_file):\n    """Placeholder for other bank extraction logic."""\n    st.warning("🚧 Extraction logic for this bank is under development.")\n    return []\n\n\n# Extraction logic dispatcher\nextraction_functions = {\n    "Wio Bank": extract_wio_transactions,\n    "Other Bank (Coming Soon)": extract_other_bank_transactions,\n}\n\nuploaded_files = st.file_uploader("📤 Upload PDF files", type=["pdf"], accept_multiple_files=True)\n\nif uploaded_files:\n    all_transactions = []\n\n    with st.spinner("🔍 Extracting transactions..."):\n        extraction_function = extraction_functions.get(selected_bank)\n        for file in uploaded_files:\n            transactions = extraction_function(file)\n            for transaction in transactions:\n                transaction.append(file.name)  # Add source file name\n            all_transactions.extend(transactions)\n\n    if all_transactions:\n        columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]\n        df = pd.DataFrame(all_transactions, columns=columns)\n\n        # Data cleaning\n        df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors=\'coerce\')\n        df["Amount (Incl. VAT)"] = df["Amount (Incl. VAT)"].replace({\',\': \'\'}, regex=True).astype(float)\n        df["Running Balance (Extracted)"] = pd.to_numeric(\n            df["Running Balance (Extracted)"].replace({\',\': \'\'}, regex=True), errors=\'coerce\'\n        )\n\n        # Sort and calculate new balance\n        df = df.dropna(subset=["Date"]).sort_values(by="Date").reset_index(drop=True)\n        opening_balance = st.number_input("💰 Enter Opening Balance:", value=0.0, step=0.01)\n        df["Calculated Balance"] = opening_balance + df["Amount (Incl. VAT)"].cumsum()\n\n        st.success("✅ Transactions extracted with running and calculated balances!")\n        st.dataframe(df, use_container_width=True)\n        \n        # Display total row count\n        st.write(f"🔢 **Total Transactions:** {len(df)}")\n\n        # Export to Excel\n        output = io.BytesIO()\n        df.to_excel(output, index=False, engine=\'openpyxl\')\n        output.seek(0)\n\n        st.download_button(\n            label="📥 Download Consolidated Excel (With Balances)",\n            data=output,\n            file_name="consolidated_transactions_with_balances.xlsx",\n            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",\n        )\n    else:\n        st.warning("⚠️ No transactions found. Please check the PDF format or selected bank.")\n')
+
+    st.write(
+        "Upload PDF statements to get a consolidated Excel with:\n"
+        "- Extracted running balance from the statement.\n"
+        "- A newly calculated balance column.\n"
+        "- Bank-specific extraction logic.\n"
+    )
+
+    bank_options = ["Wio Bank", "Other Bank (Coming Soon)"]
+    selected_bank = st.selectbox("🏦 Select Bank:", bank_options)
+
+    def extract_wio_transactions(pdf_file):
+        transactions = []
+        with pdfplumber.open(pdf_file) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if not text:
+                    continue
+                for line in text.strip().split('\n'):
+                    date_match = re.match(r'(\d{2}/\d{2}/\d{4})', line)
+                    if date_match:
+                        date = date_match.group(1)
+                        remainder = line[len(date):].strip()
+                        ref_number_match = re.search(r'(P\d{9})', remainder)
+                        ref_number = ref_number_match.group(1) if ref_number_match else ""
+                        remainder_clean = remainder.replace(ref_number, "").strip() if ref_number else remainder
+                        numbers = re.findall(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', remainder_clean)
+                        if len(numbers) >= 2:
+                            amount, running_balance = numbers[-2], numbers[-1]
+                            description = re.sub(rf'\\s*{re.escape(amount)}\\s*{re.escape(running_balance)}$', '', remainder_clean).strip()
+                        elif len(numbers) == 1:
+                            amount = numbers[0]
+                            running_balance = ""
+                            description = re.sub(rf'\\s*{re.escape(amount)}$', '', remainder_clean).strip()
+                        else:
+                            continue
+                        transactions.append([date, ref_number, description, amount, running_balance])
+        return transactions
+
+    def extract_other_bank_transactions(pdf_file):
+        st.warning("🚧 Extraction logic for this bank is under development.")
+        return []
+
+    extraction_functions = {
+        "Wio Bank": extract_wio_transactions,
+        "Other Bank (Coming Soon)": extract_other_bank_transactions,
+    }
+
+    uploaded_files = st.file_uploader("📤 Upload PDF files", type=["pdf"], accept_multiple_files=True)
+
+    if uploaded_files:
+        all_transactions = []
+        with st.spinner("🔍 Extracting transactions..."):
+            extraction_function = extraction_functions.get(selected_bank)
+            for file in uploaded_files:
+                transactions = extraction_function(file)
+                for transaction in transactions:
+                    transaction.append(file.name)  # Add source file name
+                all_transactions.extend(transactions)
+
+        if all_transactions:
+            columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
+            df = pd.DataFrame(all_transactions, columns=columns)
+            df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors='coerce')
+            df["Amount (Incl. VAT)"] = df["Amount (Incl. VAT)"].replace({',': ''}, regex=True).astype(float)
+            df["Running Balance (Extracted)"] = pd.to_numeric(
+                df["Running Balance (Extracted)"].replace({',': ''}, regex=True), errors='coerce'
+            )
+            df = df.dropna(subset=["Date"]).sort_values(by="Date").reset_index(drop=True)
+            opening_balance = st.number_input("💰 Enter Opening Balance:", value=0.0, step=0.01)
+            df["Calculated Balance"] = opening_balance + df["Amount (Incl. VAT)"].cumsum()
+
+            st.success("✅ Transactions extracted with running and calculated balances!")
+            st.dataframe(df, use_container_width=True)
+            st.write(f"🔢 **Total Transactions:** {len(df)}")
+
+            output = io.BytesIO()
+            df.to_excel(output, index=False, engine='openpyxl')
+            output.seek(0)
+
+            st.download_button(
+                label="📥 Download Consolidated Excel (With Balances)",
+                data=output,
+                file_name="consolidated_transactions_with_balances.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        else:
+            st.warning("⚠️ No transactions found. Please check the PDF format or selected bank.")
 
 with tab2:
     st.header("Categorization Pilot")
-    # Code from Categorization-Pilot
-    exec('import streamlit as st\nimport pandas as pd\nimport re\nfrom io import BytesIO\nimport zipfile\nimport uuid\n\n# ✅ Master categorization file URL\nMASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1I_Fz3slHP1mnfsKKgAFl54tKvqlo65Ug/export?format=xlsx"\n\n# 🎨 Updated CSS for improved design and hiding the GitHub icon\nst.markdown("""\n    <style>\n    [data-testid="stToolbar"] {\n        visibility: hidden !important;\n    }\n\n    body {\n        background: linear-gradient(135deg, #141e30, #243b55);\n        color: #e0e0e0;\n        font-size: 12px;\n    }\n\n    .center-title {\n        text-align: center;\n        font-size: 28px;\n        font-weight: 700;\n        margin-bottom: 15px;\n        color: #f1c40f;\n        text-shadow: 2px 2px 5px rgba(0,0,0,0.4);\n        animation: fadeIn 1s ease-in-out;\n    }\n\n    h2, h3, .stSubheader {\n        font-size: 16px !important;\n        font-weight: 600;\n        margin-bottom: 10px;\n        color: #f39c12;\n        animation: slideIn 0.7s ease forwards;\n    }\n\n    .stDataFrame {\n        background-color: rgba(255, 255, 255, 0.07);\n        border-radius: 10px;\n        padding: 10px;\n        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);\n        animation: fadeInUp 0.5s ease;\n    }\n\n    .stButton button, .stDownloadButton button {\n        background: linear-gradient(135deg, #3498db, #2980b9);\n        color: white;\n        font-weight: bold;\n        border-radius: 25px;\n        padding: 6px 16px;\n        font-size: 11px;\n        width: 100%;\n        transition: all 0.3s ease;\n    }\n\n    .stButton button:hover, .stDownloadButton button:hover {\n        background: linear-gradient(135deg, #2ecc71, #27ae60);\n        transform: scale(1.05);\n        box-shadow: 0 0 10px rgba(46, 204, 113, 0.7);\n    }\n\n    @keyframes fadeIn {\n        from { opacity: 0; transform: translateY(-10px); }\n        to { opacity: 1; transform: translateY(0); }\n    }\n\n    @keyframes slideIn {\n        from { opacity: 0; transform: translateX(-20px); }\n        to { opacity: 1; transform: translateX(0); }\n    }\n\n    @keyframes fadeInUp {\n        from { opacity: 0; transform: translateY(20px); }\n        to { opacity: 1; transform: translateY(0); }\n    }\n\n    .watermark {\n        position: fixed;\n        bottom: 5px;\n        left: 0;\n        right: 0;\n        text-align: center;\n        font-size: 11px;\n        font-style: italic;\n        color: rgba(200, 200, 200, 0.7);\n        pointer-events: none;\n        animation: fadeIn 2s ease;\n    }\n    </style>\n\n    <div class="watermark">© 2025 Afsal. All Rights Reserved.</div>\n""", unsafe_allow_html=True)\n\n# ✅ Initialize session state variables\nif "uploader_key" not in st.session_state:\n    st.session_state["uploader_key"] = str(uuid.uuid4())  # Unique key for file uploader\n\n# 🔄 Reset Function\ndef reset_app():\n    """Resets the session state and clears uploaded files."""\n    st.session_state["uploader_key"] = str(uuid.uuid4())  # Generate new key to reset uploader\n    st.rerun()\n\ndef load_master_file():\n    """Load and clean the master categorization file."""\n    try:\n        df = pd.read_excel(MASTER_SHEET_URL)\n        df[\'Key Word\'] = df[\'Key Word\'].astype(str).apply(clean_text)\n        return df\n    except Exception as e:\n        st.error(f"⚠️ Error loading master file: {e}")\n        return pd.DataFrame()\n\ndef clean_text(text):\n    """Standardize text for matching."""\n    return re.sub(r\'\\s+\', \' \', str(text).lower().replace(\'–\', \'-\').replace(\'—\', \'-\')).strip()\n\ndef find_description_column(columns):\n    """Identify the description column."""\n    possible = [\'description\', \'details\', \'narration\', \'particulars\', \'transaction details\', \'remarks\']\n    return next((col for col in columns if any(name in col.lower() for name in possible)), None)\n\ndef categorize_description(description, master_df):\n    """Assign categories based on keywords."""\n    cleaned = clean_text(description)\n    for _, row in master_df.iterrows():\n        if row[\'Key Word\'] and row[\'Key Word\'] in cleaned:\n            return row[\'Category\']\n    return \'Uncategorized\'\n\ndef categorize_statement(statement_df, master_df, desc_col):\n    """Categorize the entire statement."""\n    statement_df[\'Categorization\'] = statement_df[desc_col].apply(lambda x: categorize_description(x, master_df))\n    return statement_df\n\n# 🌐 Main Interface\nst.markdown(\'<h1 class="center-title">🤖 Categorization Bot</h1>\', unsafe_allow_html=True)\n\n# 🔄 Reset Button\ncol1, col2, col3 = st.columns([1, 1, 1])\nwith col2:\n    if st.button("🔄 Reset"):\n        reset_app()\n\n# 📂 File Upload with dynamic key to reset uploader\nuploaded_files = st.file_uploader(\n    "📂 Upload Statement Files (Excel or CSV)",\n    type=["xlsx", "csv"],\n    accept_multiple_files=True,\n    key=st.session_state["uploader_key"]\n)\n\nif uploaded_files:\n    with st.spinner(\'🚀 Loading master file...\'):\n        master_df = load_master_file()\n\n    if master_df.empty:\n        st.error("⚠️ Could not load the master file.")\n    else:\n        categorized_files = []\n        st.markdown(\'## 📑 Uploaded Files Preview & Results\')\n\n        for file in uploaded_files:\n            st.subheader(f"📄 {file.name}")\n            try:\n                statement_df = pd.read_excel(file)\n            except Exception:\n                statement_df = pd.read_csv(file)\n\n            st.dataframe(statement_df.head(), use_container_width=True)\n            desc_col = find_description_column(statement_df.columns)\n\n            if desc_col:\n                categorized = categorize_statement(statement_df, master_df, desc_col)\n                st.success(f"✅ {file.name} categorized successfully!")\n                st.dataframe(categorized.head(), use_container_width=True)\n\n                buffer = BytesIO()\n                categorized.to_excel(buffer, index=False)\n                buffer.seek(0)\n                categorized_files.append((file.name, buffer))\n\n                st.download_button(\n                    label=f"📥 Download {file.name}",\n                    data=buffer,\n                    file_name=f"Categorized_{file.name}",\n                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"\n                )\n            else:\n                st.error(f"⚠️ No description column found in {file.name}.")\n\n        # 📦 Download All as ZIP\n        if categorized_files:\n            zip_buffer = BytesIO()\n            with zipfile.ZipFile(zip_buffer, "w") as zipf:\n                for fname, data in categorized_files:\n                    zipf.writestr(f"Categorized_{fname}", data.getvalue())\n            zip_buffer.seek(0)\n\n            st.download_button(\n                label="📦 Download All Categorized Files as ZIP",\n                data=zip_buffer,\n                file_name="Categorized_Files.zip",\n                mime="application/zip"\n            )\nelse:\n    st.info("👆 Upload files to begin.")\n')
+    st.write("🚧 Placeholder for Categorization Pilot functionality.")
