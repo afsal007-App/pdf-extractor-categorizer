@@ -10,6 +10,40 @@ import requests
 # ✅ Set page configuration
 st.set_page_config(page_title="📊 Financial Statement Tool", layout="wide", page_icon="💰")
 
+# 🎨 Define color palette and styling
+PRIMARY_COLOR = "#4A90E2"
+SECONDARY_COLOR = "#F5F7FA"
+ACCENT_COLOR = "#50E3C2"
+WARNING_COLOR = "#F8E71C"
+TEXT_COLOR = "#333333"
+
+st.markdown(f"""
+    <style>
+        .stButton > button {{
+            background-color: {PRIMARY_COLOR};
+            color: white;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            width: 100%;
+            border: none;
+            cursor: pointer;
+        }}
+        .stButton > button:hover {{
+            background-color: {ACCENT_COLOR};
+        }}
+        h1, h2, h3, h4, h5, h6 {{
+            color: {TEXT_COLOR};
+        }}
+        .reportview-container .main .block-container {{
+            padding: 1rem 2rem;
+            background-color: {SECONDARY_COLOR};
+            border-radius: 10px;
+        }}
+    </style>
+""", unsafe_allow_html=True)
+
 # ✅ Load Lottie animation with error handling
 def load_lottieurl(url: str):
     try:
@@ -105,13 +139,13 @@ for page, label in nav_options.items():
 
 # -------------------- 📄 PDF to Excel Converter --------------------
 if st.session_state["active_tab"] == "PDF to Excel Converter":
-    st.title("📝 PDF to Excel Converter")
+    st.header("PDF to Excel Converter", divider='rainbow')
 
     col1, col2 = st.columns([3, 1])
     with col1:
         if upload_animation:
-            st_lottie(upload_animation, height=200, key="upload")
-        uploaded_files = st.file_uploader("Upload your PDF files:", type=["pdf"], accept_multiple_files=True)
+            st_lottie(upload_animation, height=180, key="upload")
+        uploaded_files = st.file_uploader("Upload PDF files:", type=["pdf"], accept_multiple_files=True)
 
     with col2:
         st.subheader("⚙️ Options")
@@ -157,7 +191,7 @@ if st.session_state["active_tab"] == "PDF to Excel Converter":
 
 # -------------------- 📂 Categorization Pilot --------------------
 elif st.session_state["active_tab"] == "Categorization Pilot":
-    st.title("📂 Categorization Pilot")
+    st.header("Categorization Pilot", divider='rainbow')
 
     col1, col2 = st.columns([3, 1])
     with col2:
@@ -173,9 +207,8 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
             df_to_categorize = st.session_state["converted_df"]
             categorized_df = categorize_statement(df_to_categorize, master_df)
             file_name = "Converted_Categorized_Statement.xlsx"
-            if file_name not in st.session_state["processed_files"]:
-                st.session_state["categorized_files"].append((file_name, categorized_df))
-                st.session_state["processed_files"].add(file_name)
+            st.session_state["categorized_files"].append((file_name, categorized_df))
+            st.session_state["processed_files"].add(file_name)
             st.success("✅ Categorization completed!")
             if success_animation:
                 st_lottie(success_animation, height=150, key="success")
@@ -196,7 +229,7 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
         if uploaded_files:
             for file in uploaded_files:
                 if file.name in st.session_state["processed_files"]:
-                    st.warning(f"⚠️ {file.name} has already been processed and will be skipped to avoid duplication.")
+                    st.warning(f"⚠️ {file.name} has already been processed and will be skipped.")
                     continue
                 try:
                     statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
