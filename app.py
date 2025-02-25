@@ -6,11 +6,15 @@ import io
 import zipfile
 from streamlit_lottie import st_lottie
 import requests
+from st_pages import add_page_title, show_pages_from_config
+from streamlit_extras.switch_page_button import switch_page
+from streamlit_extras.app_logo import add_logo
 
 # ✅ Set page configuration
 st.set_page_config(page_title="📊 Financial Statement Tool", layout="wide", page_icon="💰")
+add_page_title("📊 Financial Statement Tool")
 
-# 🧭 Load Lottie animation with error handling
+# ✅ Load Lottie animation with error handling
 def load_lottieurl(url: str):
     try:
         response = requests.get(url)
@@ -21,9 +25,9 @@ def load_lottieurl(url: str):
         return None
 
 # 🔄 Load animations
-upload_animation = load_lottieurl("https://assets4.lottiefiles.com/packages/lf20_jtbfg2nb.json")
-process_animation = load_lottieurl("https://assets3.lottiefiles.com/packages/lf20_zrqthn6o.json")
-success_animation = load_lottieurl("https://assets3.lottiefiles.com/private_files/lf30_vp9lvfcz.json")
+upload_animation = load_lottieurl("https://assets1.lottiefiles.com/packages/lf20_puciaact.json")
+process_animation = load_lottieurl("https://assets6.lottiefiles.com/private_files/lf30_6xiyzbtp.json")
+success_animation = load_lottieurl("https://assets7.lottiefiles.com/packages/lf20_4kgj19pg.json")
 
 # ✅ Master categorization file URL
 MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1I_Fz3slHP1mnfsKKgAFl54tKvqlo65Ug/export?format=xlsx"
@@ -88,20 +92,27 @@ def reset_categorization():
     st.session_state["categorized_files"] = []
 
 # -------------------- 🗂️ Sidebar Navigation --------------------
-st.sidebar.title("🔎 Navigation")
-tab_options = ["📄 PDF to Excel Converter", "📂 Categorization Pilot"]
-selected_tab = st.sidebar.radio("", tab_options, index=tab_options.index(st.session_state["active_tab"]))
-st.session_state["active_tab"] = selected_tab
+st.sidebar.title("🚀 Quick Navigation")
+show_pages_from_config()
+add_logo("https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Finance_logo.svg/1024px-Finance_logo.svg.png")
+
+with st.sidebar.expander("🔧 Settings"):
+    theme_option = st.radio("Theme:", ["Light", "Dark", "Auto"], index=2)
+    st.markdown(f"Current theme: **{theme_option}**")
 
 # -------------------- 📄 PDF to Excel Converter --------------------
-if selected_tab == "📄 PDF to Excel Converter":
+if st.session_state["active_tab"] == "📄 PDF to Excel Converter":
     st.title("📝 PDF to Excel Converter")
-
+    
     col1, col2 = st.columns([3, 1])
     with col1:
-        uploaded_files = st.file_uploader("Upload PDF files:", type=["pdf"], accept_multiple_files=True)
+        if upload_animation:
+            st_lottie(upload_animation, height=200, key="upload")
+        uploaded_files = st.file_uploader("Upload your PDF files:", type=["pdf"], accept_multiple_files=True)
+
     with col2:
-        if st.button("🔄 Reset"):
+        st.subheader("⚙️ Options")
+        if st.button("🔄 Reset Converter"):
             reset_converter()
             st.rerun()
 
@@ -130,22 +141,23 @@ if selected_tab == "📄 PDF to Excel Converter":
                 "📥 Download Converted Excel",
                 data=excel_buffer,
                 file_name="Converted_Statement.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
             )
 
-            if st.button("➡️ Proceed to Categorization"):
+            if st.button("➡️ Proceed to Categorization", use_container_width=True):
                 st.session_state["converted_df"] = df
                 st.session_state["auto_categorize"] = True
                 st.session_state["active_tab"] = "📂 Categorization Pilot"
                 st.rerun()
 
 # -------------------- 📂 Categorization Pilot --------------------
-elif selected_tab == "📂 Categorization Pilot":
+elif st.session_state["active_tab"] == "📂 Categorization Pilot":
     st.title("📂 Categorization Pilot")
 
     col1, col2 = st.columns([3, 1])
     with col2:
-        if st.button("🔄 Reset"):
+        if st.button("🔄 Reset Categorization"):
             reset_categorization()
             st.rerun()
 
@@ -156,9 +168,10 @@ elif selected_tab == "📂 Categorization Pilot":
         if st.session_state["auto_categorize"] and st.session_state["converted_df"] is not None:
             df_to_categorize = st.session_state["converted_df"]
             categorized_df = categorize_statement(df_to_categorize, master_df)
-
             st.session_state["categorized_files"].append(("Converted_Categorized_Statement.xlsx", categorized_df))
             st.success("✅ Categorization completed!")
+            if success_animation:
+                st_lottie(success_animation, height=150, key="success")
 
         st.markdown("### 📊 Preview of Categorized Files")
         for file_name, categorized_df in st.session_state["categorized_files"]:
@@ -198,5 +211,6 @@ elif selected_tab == "📂 Categorization Pilot":
                 label="📥 Download All Categorized Files (ZIP)",
                 data=zip_buffer,
                 file_name="Categorized_Statements.zip",
-                mime="application/zip"
+                mime="application/zip",
+                use_container_width=True
             )
