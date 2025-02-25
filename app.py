@@ -7,7 +7,7 @@ import io
 import zipfile
 
 # ---------------------------
-# Custom Styling
+# Page Config and Styling
 # ---------------------------
 st.set_page_config(page_title="📄 PDF & Excel Categorization Tool", layout="wide", page_icon="📊")
 
@@ -36,22 +36,19 @@ st.markdown("""
         font-size: 16px;
         font-weight: bold;
     }
-    .css-1q8dd3e {
-        background-color: #f0f0f5;
-        padding: 10px;
-        border-radius: 10px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------
-# Helper Functions (No Change)
+# Helper Functions
 # ---------------------------
 
 def clean_text(text):
+    """Clean and standardize text for matching."""
     return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
 
 def extract_wio_transactions(pdf_file):
+    """Extract transactions from Wio Bank statements."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
@@ -61,7 +58,6 @@ def extract_wio_transactions(pdf_file):
             text = page.extract_text()
             if not text:
                 continue
-
             lines = text.strip().split('\n')
             for line in lines:
                 date_match = re.match(date_pattern, line)
@@ -73,7 +69,6 @@ def extract_wio_transactions(pdf_file):
                     numbers = re.findall(amount_pattern, remainder)
                     if len(numbers) < 1:
                         continue
-
                     amount = numbers[-2] if len(numbers) >= 2 else ""
                     running_balance = numbers[-1] if len(numbers) >= 1 else ""
 
@@ -92,10 +87,12 @@ def extract_wio_transactions(pdf_file):
     return transactions
 
 def find_description_column(columns):
+    """Identify the description column."""
     possible = ['description', 'details', 'narration', 'particulars', 'transaction details', 'remarks']
     return next((col for col in columns if any(name in col.lower() for name in possible)), None)
 
 def load_master_file():
+    """Load the master categorization file."""
     try:
         url = "https://docs.google.com/spreadsheets/d/1I_Fz3slHP1mnfsKKgAFl54tKvqlo65Ug/export?format=xlsx"
         df = pd.read_excel(url)
@@ -106,26 +103,45 @@ def load_master_file():
         return pd.DataFrame()
 
 def save_to_excel(df):
+    """Convert DataFrame to BytesIO Excel file."""
     buffer = io.BytesIO()
     df.to_excel(buffer, index=False)
     buffer.seek(0)
     return buffer
 
-# ---------------------------
-# UI/UX Improved Layout
-# ---------------------------
+def categorize_description(description, master_df):
+    """Categorize description based on master keywords."""
+    cleaned = clean_text(description)
+    for _, row in master_df.iterrows():
+        if row['Key Word'] and row['Key Word'] in cleaned:
+            return row['Category']
+    return 'Uncategorized'
 
+def categorize_statement(statement_df, master_df, desc_col):
+    """Categorize the statement DataFrame."""
+    statement_df['Categorization'] = statement_df[desc_col].apply(lambda x: categorize_description(x, master_df))
+    return statement_df
+
+# ---------------------------
+# Initialize Session State
+# ---------------------------
+if 'converted_file_json' not in st.session_state:
+    st.session_state['converted_file_json'] = None
+
+# ---------------------------
+# UI Layout
+# ---------------------------
 st.title("📑 PDF & Excel Categorization Tool")
 st.caption("🚀 Effortlessly convert PDF bank statements into categorized Excel sheets.")
 
 tabs = st.tabs(["🔄 PDF to Excel Converter", "🏷️ Categorization"])
 
 # ---------------------------
-# PDF to Excel Converter
+# PDF to Excel Converter Tab
 # ---------------------------
 with tabs[0]:
     st.header("🔄 PDF to Excel Converter")
-    uploaded_pdfs = st.file_uploader("📤 Upload PDF files", type=["pdf"], accept_multiple_files=True, help="Drag and drop your PDF files here.")
+    uploaded_pdfs = st.file_uploader("📤 Upload PDF files", type=["pdf"], accept_multiple_files=True)
 
     if uploaded_pdfs:
         all_transactions = []
@@ -153,8 +169,8 @@ with tabs[0]:
             st.dataframe(df, use_container_width=True)
 
             if st.button("➡️ Prepare for Categorization"):
-                st.session_state['converted_file'] = df
-                st.success("📂 Converted file ready for categorization!")
+                st.session_state['converted_file_json'] = df.to_json()
+                st.success("📂 Converted file saved for categorization!")
 
             output = save_to_excel(df)
             st.download_button(
@@ -166,7 +182,7 @@ with tabs[0]:
         else:
             st.warning("⚠️ No transactions found.")
     else:
-        st.info("ℹ️ Upload PDF files to start conversion.")
+        st.info("ℹ️ Upload PDF files to start the conversion process.")
 
 # ---------------------------
 # Categorization Tab
@@ -176,27 +192,30 @@ with tabs[1]:
     master_df = load_master_file()
 
     if master_df.empty:
-        st.error("❌ Unable to load master categorization file.")
+        st.error("❌ Master categorization file could not be loaded.")
     else:
         uploaded_excels = st.file_uploader("📥 Upload Excel/CSV files", type=["xlsx", "csv"], accept_multiple_files=True)
         files_to_categorize = list(uploaded_excels) if uploaded_excels else []
-        if st.session_state.get('converted_file') and st.checkbox("Include Converted File for Categorization"):
-            files_to_categorize.append(st.session_state['converted_file'])
+
+        if st.session_state['converted_file_json'] and st.checkbox("Include Converted File for Categorization"):
+            converted_df = pd.read_json(st.session_state['converted_file_json'])
+            files_to_categorize.append(converted_df)
 
         if files_to_categorize:
+            categorized_files = []
             for file in files_to_categorize:
                 filename = "Converted_File.xlsx" if isinstance(file, pd.DataFrame) else file.name
                 df = file if isinstance(file, pd.DataFrame) else pd.read_excel(file)
-
                 desc_col = find_description_column(df.columns)
-                if desc_col:
-                    categorized_df = df.copy()
-                    categorized_df['Categorization'] = categorized_df[desc_col].apply(lambda x: 'Uncategorized')  # Example categorization
 
+                if desc_col:
+                    categorized_df = categorize_statement(df, master_df, desc_col)
                     st.subheader(f"📊 Preview: {filename}")
                     st.dataframe(categorized_df.head(10), use_container_width=True)
 
                     buffer = save_to_excel(categorized_df)
+                    categorized_files.append((filename, buffer))
+
                     st.download_button(
                         label=f"⬇️ Download {filename}",
                         data=buffer,
@@ -205,4 +224,20 @@ with tabs[1]:
                     )
                 else:
                     st.warning(f"⚠️ No description column found in {filename}.")
+
+            if len(categorized_files) > 1:
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w") as zipf:
+                    for fname, data in categorized_files:
+                        zipf.writestr(f"Categorized_{fname}", data.getvalue())
+                zip_buffer.seek(0)
+
+                st.download_button(
+                    label="⬇️ Download All as ZIP",
+                    data=zip_buffer,
+                    file_name="Categorized_Files.zip",
+                    mime="application/zip"
+                )
+        else:
+            st.info("ℹ️ Upload files or use the converted file to categorize.")
 
