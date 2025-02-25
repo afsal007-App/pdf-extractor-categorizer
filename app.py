@@ -120,8 +120,15 @@ with tabs[0]:
             columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
             df = pd.DataFrame(all_transactions, columns=columns)
             df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
-            df['Amount (Incl. VAT)'] = df['Amount (Incl. VAT)'].replace({',': ''}, regex=True).astype(float)
-            df['Running Balance (Extracted)'] = pd.to_numeric(df['Running Balance (Extracted)'].replace({',': ''}, regex=True), errors='coerce')
+            
+            # ✅ Safe conversion with error handling
+            df['Amount (Incl. VAT)'] = pd.to_numeric(
+                df['Amount (Incl. VAT)'].replace({',': ''}, regex=True), errors='coerce'
+            )
+            df['Running Balance (Extracted)'] = pd.to_numeric(
+                df['Running Balance (Extracted)'].replace({',': ''}, regex=True), errors='coerce'
+            )
+
             df = df.dropna(subset=["Date"]).sort_values(by="Date").reset_index(drop=True)
 
             opening_balance = st.number_input("Enter Opening Balance:", value=0.0, step=0.01)
@@ -158,7 +165,6 @@ with tabs[1]:
     else:
         uploaded_excels = st.file_uploader("Upload Excel/CSV files for categorization", type=["xlsx", "csv"], accept_multiple_files=True)
         
-        # Files to categorize include uploaded files and converted file from previous section
         files_to_categorize = list(uploaded_excels) if uploaded_excels else []
         if st.session_state['converted_file'] is not None:
             if st.checkbox("Include Converted File for Categorization"):
