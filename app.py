@@ -8,6 +8,9 @@ import zipfile
 from streamlit_lottie import st_lottie
 import requests
 
+# ✅ Streamlit Page Configuration (MUST BE FIRST STREAMLIT COMMAND)
+st.set_page_config(page_title="PDF & Excel Categorization Tool", page_icon="📂", layout="wide")
+
 # ---------------------------
 # Helper Functions
 # ---------------------------
@@ -110,15 +113,17 @@ def save_to_excel(df):
 # UI Setup and Theming
 # ---------------------------
 
-# Load CSS and animations
+# Load CSS and animations AFTER st.set_page_config
 local_css("assets/styles.css")
+
 lottie_loading = load_lottie_url("https://assets3.lottiefiles.com/packages/lf20_j1adxtyb.json")
 lottie_success = load_lottie_url("https://assets2.lottiefiles.com/packages/lf20_pprxh53t.json")
 
-# Streamlit Page Config
-st.set_page_config(page_title="PDF & Excel Categorization Tool", page_icon="📂", layout="wide")
+# ---------------------------
+# Streamlit Interface
+# ---------------------------
 
-# Tabs
+# Tabs for navigation
 tabs = st.tabs(["📄 PDF to Excel Converter", "🗂️ Categorization"])
 
 # Initialize session state
