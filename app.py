@@ -103,20 +103,27 @@ def extract_wio_transactions(pdf_file):
                 if date_match:
                     date = date_match.group(1)
                     remainder = line[len(date):].strip()
-                    description = remainder
+
+                    # Extract Amount and Running Balance
                     numbers = re.findall(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', remainder)
-                    amount = numbers[-1] if numbers else ''
-                    transactions.append([date, description, amount])
+                    amount = float(numbers[-2].replace(',', '')) if len(numbers) >= 2 else 0.0
+                    running_balance = float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.0
+
+                    description = re.sub(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', '', remainder).strip()
+                    transactions.append([date, description, amount, running_balance])
+
     return transactions
+
+def calculate_calculated_balance(df):
+    df = df.sort_values(by="Date")
+    df['Calculated Balance'] = df['Amount'].cumsum()
+    return df
 
 def categorize_statement(df, master_df):
     df['Categorization'] = df['Description'].apply(
         lambda desc: next((row['Category'] for _, row in master_df.iterrows() if row['Key Word'] in desc.lower()), "Uncategorized")
     )
     return df
-
-def remove_duplicates(df):
-    return df.drop_duplicates(subset=["Date", "Description", "Amount"])
 
 def reset_converter_section():
     st.session_state["converted_df"] = None
@@ -168,12 +175,12 @@ if st.session_state["active_tab"] == "PDF to Excel Converter":
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            df = pd.DataFrame(all_transactions, columns=["Date", "Description", "Amount", "Source File"])
+            df = pd.DataFrame(all_transactions, columns=["Date", "Description", "Amount", "Running Balance", "Source File"])
             df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors="coerce")
-            df = remove_duplicates(df)
+            df = calculate_calculated_balance(df)
 
             st.session_state["converted_df"] = df
-            st.success(f"✅ Extracted {len(df)} unique transactions!")
+            st.success(f"✅ Extracted {len(df)} transactions with calculated balances!")
             st.dataframe(df, use_container_width=True, height=400)
 
             buffer = io.BytesIO()
@@ -210,7 +217,6 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
         if st.session_state["auto_categorize"] and st.session_state["converted_df"] is not None:
             df_to_categorize = st.session_state["converted_df"]
             categorized_df = categorize_statement(df_to_categorize, master_df)
-            categorized_df = remove_duplicates(categorized_df)
 
             st.session_state["categorized_files"]["Converted_Categorized_Statement.xlsx"] = categorized_df
             st.success("✅ Categorization completed!")
@@ -240,9 +246,9 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
                     continue
                 try:
                     statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
-                    statement_df = statement_df[[col for col in statement_df.columns if col in ["Date", "Description", "Amount"]]]
+                    statement_df = statement_df[[col for col in statement_df.columns if col in ["Date", "Description", "Amount", "Running Balance"]]]
+                    statement_df = calculate_calculated_balance(statement_df)
                     categorized_df = categorize_statement(statement_df, master_df)
-                    categorized_df = remove_duplicates(categorized_df)
                     st.session_state["categorized_files"][f"Categorized_{file.name}"] = categorized_df
                     st.success(f"✅ {file.name} categorized successfully!")
                 except Exception as e:
@@ -260,7 +266,7 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
 
             zip_buffer.seek(0)
             st.download_button(
-                label="📥 Download All Categorized Files (ZIP)",
+                label="📥 Download All Categorized Files as ZIP",
                 data=zip_buffer,
                 file_name="Categorized_Statements.zip",
                 mime="application/zip",
