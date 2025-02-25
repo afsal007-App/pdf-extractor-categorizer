@@ -3,6 +3,7 @@ import pdfplumber
 import pandas as pd
 import re
 import io
+import zipfile
 from streamlit_lottie import st_lottie
 import requests
 
@@ -14,11 +15,9 @@ def load_lottieurl(url: str):
     try:
         response = requests.get(url)
         if response.status_code != 200:
-            st.warning("⚠️ Could not load animation.")
             return None
         return response.json()
-    except Exception as e:
-        st.error(f"❌ Failed to load animation: {e}")
+    except Exception:
         return None
 
 # 🔄 Load animations
@@ -36,6 +35,8 @@ if "auto_categorize" not in st.session_state:
     st.session_state["auto_categorize"] = False
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "📄 PDF to Excel Converter"
+if "categorized_files" not in st.session_state:
+    st.session_state["categorized_files"] = []
 
 # 🧹 Helper functions
 def load_master_file():
@@ -79,30 +80,30 @@ def categorize_statement(df, master_df):
     )
     return df
 
+def reset_converter():
+    st.session_state["converted_df"] = None
+    st.session_state["auto_categorize"] = False
+
+def reset_categorization():
+    st.session_state["categorized_files"] = []
+
 # -------------------- 🗂️ Sidebar Navigation --------------------
-st.sidebar.markdown("## 🌐 Navigation")
-tab_labels = {
-    "📄 PDF to Excel Converter": "📝 PDF to Excel Converter",
-    "📂 Categorization Pilot": "📂 Categorization Pilot"
-}
-
-selected_tab = st.sidebar.selectbox(
-    "Choose a section:",
-    options=list(tab_labels.keys()),
-    format_func=lambda x: tab_labels[x],
-    index=list(tab_labels.keys()).index(st.session_state["active_tab"]),
-    help="Navigate between the converter and categorization sections."
-)
-
+st.sidebar.title("🔎 Navigation")
+tab_options = ["📄 PDF to Excel Converter", "📂 Categorization Pilot"]
+selected_tab = st.sidebar.radio("", tab_options, index=tab_options.index(st.session_state["active_tab"]))
 st.session_state["active_tab"] = selected_tab
 
 # -------------------- 📄 PDF to Excel Converter --------------------
 if selected_tab == "📄 PDF to Excel Converter":
     st.title("📝 PDF to Excel Converter")
-    if upload_animation:
-        st_lottie(upload_animation, height=200, key="upload_animation")
 
-    uploaded_files = st.file_uploader("Upload PDF files:", type=["pdf"], accept_multiple_files=True, help="Upload one or more PDF statements.")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        uploaded_files = st.file_uploader("Upload PDF files:", type=["pdf"], accept_multiple_files=True)
+    with col2:
+        if st.button("🔄 Reset"):
+            reset_converter()
+            st.experimental_rerun()
 
     if uploaded_files:
         all_transactions = []
@@ -118,7 +119,7 @@ if selected_tab == "📄 PDF to Excel Converter":
             df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors="coerce")
             df = df.dropna(subset=["Date"]).sort_values(by="Date").reset_index(drop=True)
 
-            st.success("✅ Transactions extracted!")
+            st.success(f"✅ Extracted {len(df)} transactions!")
             st.dataframe(df, use_container_width=True, height=400)
 
             excel_buffer = io.BytesIO()
@@ -129,81 +130,73 @@ if selected_tab == "📄 PDF to Excel Converter":
                 "📥 Download Converted Excel",
                 data=excel_buffer,
                 file_name="Converted_Statement.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Download the transactions in Excel format."
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
             if st.button("➡️ Proceed to Categorization"):
                 st.session_state["converted_df"] = df
                 st.session_state["auto_categorize"] = True
                 st.session_state["active_tab"] = "📂 Categorization Pilot"
-                st.rerun()
+                st.experimental_rerun()
 
 # -------------------- 📂 Categorization Pilot --------------------
 elif selected_tab == "📂 Categorization Pilot":
     st.title("📂 Categorization Pilot")
-    if process_animation:
-        st_lottie(process_animation, height=200, key="process_animation")
+
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔄 Reset"):
+            reset_categorization()
+            st.experimental_rerun()
 
     master_df = load_master_file()
     if master_df.empty:
         st.error("⚠️ Could not load the master categorization file.")
     else:
         if st.session_state["auto_categorize"] and st.session_state["converted_df"] is not None:
-            st.info("🔄 Categorizing your statement...")
             df_to_categorize = st.session_state["converted_df"]
             categorized_df = categorize_statement(df_to_categorize, master_df)
 
+            st.session_state["categorized_files"].append(("Converted_Categorized_Statement.xlsx", categorized_df))
             st.success("✅ Categorization completed!")
-            if success_animation:
-                st_lottie(success_animation, height=150, key="success_animation")
 
-            st.dataframe(categorized_df, use_container_width=True, height=400)
+        st.markdown("### 📊 Preview of Categorized Files")
+        for file_name, categorized_df in st.session_state["categorized_files"]:
+            st.subheader(f"📄 {file_name}")
+            st.dataframe(categorized_df.head(10), use_container_width=True)
 
-            buffer = io.BytesIO()
-            categorized_df.to_excel(buffer, index=False)
-            buffer.seek(0)
-
-            st.download_button(
-                "📥 Download Categorized Statement",
-                data=buffer,
-                file_name="Categorized_Statement.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Download the categorized statement."
-            )
-
-            st.session_state["auto_categorize"] = False
-
-        st.markdown("### 📂 Upload for Manual Categorization")
+        st.markdown("### 📂 Upload Additional Files for Categorization")
         uploaded_files = st.file_uploader(
-            "Upload Excel/CSV statements:",
+            "Upload Excel/CSV files:",
             type=["xlsx", "csv"],
             accept_multiple_files=True,
-            help="Manually upload statements for categorization."
+            key="manual_upload"
         )
 
         if uploaded_files:
             for file in uploaded_files:
-                st.subheader(f"📄 Processing: {file.name}")
                 try:
                     statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
-                    st.dataframe(statement_df.head(), use_container_width=True)
-
                     categorized_df = categorize_statement(statement_df, master_df)
-                    st.success(f"✅ {file.name} categorized!")
-
-                    buffer = io.BytesIO()
-                    categorized_df.to_excel(buffer, index=False)
-                    buffer.seek(0)
-
-                    st.download_button(
-                        f"📥 Download Categorized {file.name}",
-                        data=buffer,
-                        file_name=f"Categorized_{file.name}",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        help="Download categorized statement."
-                    )
+                    st.session_state["categorized_files"].append((f"Categorized_{file.name}", categorized_df))
+                    st.success(f"✅ {file.name} categorized successfully!")
                 except Exception as e:
                     st.error(f"⚠️ Error processing {file.name}: {e}")
-        elif not st.session_state["auto_categorize"]:
-            st.info("👆 Upload files above or use the **PDF to Excel Converter**.")
+
+        if st.session_state["categorized_files"]:
+            st.markdown("### 📦 Download All Categorized Files as ZIP")
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w") as zipf:
+                for file_name, categorized_df in st.session_state["categorized_files"]:
+                    file_buffer = io.BytesIO()
+                    categorized_df.to_excel(file_buffer, index=False)
+                    file_buffer.seek(0)
+                    zipf.writestr(file_name, file_buffer.read())
+
+            zip_buffer.seek(0)
+            st.download_button(
+                label="📥 Download All Categorized Files (ZIP)",
+                data=zip_buffer,
+                file_name="Categorized_Statements.zip",
+                mime="application/zip"
+            )
