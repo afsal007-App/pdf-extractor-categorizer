@@ -37,6 +37,8 @@ if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "PDF to Excel Converter"
 if "categorized_files" not in st.session_state:
     st.session_state["categorized_files"] = []
+if "processed_files" not in st.session_state:
+    st.session_state["processed_files"] = set()
 
 # 🧹 Helper functions
 def load_master_file():
@@ -86,6 +88,7 @@ def reset_converter():
 
 def reset_categorization():
     st.session_state["categorized_files"] = []
+    st.session_state["processed_files"] = set()
 
 # -------------------- 🗂️ Vertical Sidebar with Buttons --------------------
 st.sidebar.title("🚀 Navigation")
@@ -96,7 +99,6 @@ nav_options = {
 }
 
 for page, label in nav_options.items():
-    button_style = "width: 100%; padding: 10px; margin-bottom: 10px; font-size: 16px; border-radius: 10px;"
     if st.sidebar.button(label, key=page, help=f"Navigate to {label}", use_container_width=True):
         st.session_state["active_tab"] = page
         st.rerun()
@@ -149,6 +151,7 @@ if st.session_state["active_tab"] == "PDF to Excel Converter":
             if st.button("➡️ Proceed to Categorization", use_container_width=True):
                 st.session_state["converted_df"] = df
                 st.session_state["auto_categorize"] = True
+                st.session_state["processed_files"].add("Converted_Categorized_Statement.xlsx")
                 st.session_state["active_tab"] = "Categorization Pilot"
                 st.rerun()
 
@@ -169,7 +172,10 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
         if st.session_state["auto_categorize"] and st.session_state["converted_df"] is not None:
             df_to_categorize = st.session_state["converted_df"]
             categorized_df = categorize_statement(df_to_categorize, master_df)
-            st.session_state["categorized_files"].append(("Converted_Categorized_Statement.xlsx", categorized_df))
+            file_name = "Converted_Categorized_Statement.xlsx"
+            if file_name not in st.session_state["processed_files"]:
+                st.session_state["categorized_files"].append((file_name, categorized_df))
+                st.session_state["processed_files"].add(file_name)
             st.success("✅ Categorization completed!")
             if success_animation:
                 st_lottie(success_animation, height=150, key="success")
@@ -189,10 +195,14 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
 
         if uploaded_files:
             for file in uploaded_files:
+                if file.name in st.session_state["processed_files"]:
+                    st.warning(f"⚠️ {file.name} has already been processed and will be skipped to avoid duplication.")
+                    continue
                 try:
                     statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
                     categorized_df = categorize_statement(statement_df, master_df)
                     st.session_state["categorized_files"].append((f"Categorized_{file.name}", categorized_df))
+                    st.session_state["processed_files"].add(file.name)
                     st.success(f"✅ {file.name} categorized successfully!")
                 except Exception as e:
                     st.error(f"⚠️ Error processing {file.name}: {e}")
