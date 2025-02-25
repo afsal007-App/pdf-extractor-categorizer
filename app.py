@@ -100,22 +100,18 @@ def extract_wio_transactions(pdf_file):
                 continue
             lines = text.strip().split('\n')
             for line_num, line in enumerate(lines):
-                # Match the date format and extract fields
                 date_match = re.match(r'(\d{2}/\d{2}/\d{4})', line)
                 if date_match:
                     date = date_match.group(1)
                     remainder = line[len(date):].strip()
 
-                    # Extract Ref. Number
                     ref_number_match = re.search(r'(?:Ref(?:erence)? Number[:\s]*)?(\w+)', remainder)
                     ref_number = ref_number_match.group(1) if ref_number_match else ""
 
-                    # Extract Amount (Incl. VAT) and Balance (AED)
                     numbers = re.findall(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', remainder)
                     amount = float(numbers[-2].replace(',', '')) if len(numbers) >= 2 else 0.0
                     balance = float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.0
 
-                    # Extract Description
                     description = re.sub(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', '', remainder).replace(ref_number, '').strip()
 
                     transactions.append([date, ref_number, description, amount, balance])
@@ -123,8 +119,11 @@ def extract_wio_transactions(pdf_file):
     return transactions
 
 def calculate_calculated_balance(df):
-    df = df.sort_values(by="Date")
-    df['Calculated Balance'] = df['Amount'].cumsum()
+    if "Amount (Incl. VAT)" in df.columns:
+        df = df.sort_values(by="Date")
+        df['Calculated Balance'] = df['Amount (Incl. VAT)'].cumsum()
+    else:
+        st.error("⚠️ 'Amount (Incl. VAT)' column is missing. Please check the extracted data.")
     return df
 
 def categorize_statement(df, master_df):
