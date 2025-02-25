@@ -10,7 +10,6 @@ import requests
 st.set_page_config(page_title="📊 Financial Statement Tool", layout="wide", page_icon="💰")
 
 # 🧭 Load Lottie animation
-@st.cache_data
 def load_lottieurl(url: str):
     response = requests.get(url)
     if response.status_code != 200:
