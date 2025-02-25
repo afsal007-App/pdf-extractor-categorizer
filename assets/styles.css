@@ -1,18 +1,18 @@
-/* General background fixes */
+/* General background and font */
 body, .stApp {
     background-color: #1E1E1E !important;
+    color: #F5F5F5 !important;
+    font-family: 'Inter', sans-serif;
 }
 
-/* Remove or match separator lines to dark theme */
-hr {
-    background-color: #2D2D2D !important;
-    border: none;
-    height: 2px;
-}
-
-/* Style headers for consistency */
+/* Header styling */
 h1, h2, h3 {
     color: #F5F5F5;
+}
+
+/* Dataframe styling */
+.stDataFrame {
+    border-radius: 8px;
 }
 
 /* Button styling */
@@ -30,18 +30,20 @@ h1, h2, h3 {
     background-color: #4338CA;
 }
 
-/* Dataframe styling */
-.stDataFrame {
-    border-radius: 8px;
-}
-
-/* File uploader consistent with dark theme */
+/* File uploader adjustments */
 .css-1kyxreq {
     background-color: #2B2B2B !important;
     border-radius: 8px;
 }
 
-/* Remove unwanted white backgrounds in containers */
+/* Remove white bars (Streamlit separators) */
+hr {
+    background-color: #2D2D2D !important;
+    border: none;
+    height: 2px;
+}
+
+/* Transparent container backgrounds */
 .st-emotion-cache-1avcm0n, .st-emotion-cache-1r6slb0 {
     background-color: transparent !important;
 }
