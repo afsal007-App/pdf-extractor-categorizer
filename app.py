@@ -116,6 +116,9 @@ def categorize_statement(df, master_df):
     )
     return df
 
+def remove_duplicates(df):
+    return df.drop_duplicates(subset=["Date", "Ref. Number", "Description", "Amount", "Running Balance"])
+
 def reset_converter():
     st.session_state["converted_df"] = None
     st.session_state["auto_categorize"] = False
@@ -166,8 +169,9 @@ if st.session_state["active_tab"] == "PDF to Excel Converter":
             df = pd.DataFrame(all_transactions, columns=["Date", "Ref. Number", "Description", "Amount", "Running Balance", "Source File"])
             df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors="coerce")
             df = df.dropna(subset=["Date"]).sort_values(by="Date").reset_index(drop=True)
+            df = remove_duplicates(df)
 
-            st.success(f"✅ Extracted {len(df)} transactions!")
+            st.success(f"✅ Extracted {len(df)} unique transactions!")
             st.dataframe(df, use_container_width=True, height=400)
 
             excel_buffer = io.BytesIO()
@@ -206,15 +210,20 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
         if st.session_state["auto_categorize"] and st.session_state["converted_df"] is not None:
             df_to_categorize = st.session_state["converted_df"]
             categorized_df = categorize_statement(df_to_categorize, master_df)
+            categorized_df = remove_duplicates(categorized_df)
             file_name = "Converted_Categorized_Statement.xlsx"
-            st.session_state["categorized_files"].append((file_name, categorized_df))
-            st.session_state["processed_files"].add(file_name)
+
+            if file_name not in [file[0] for file in st.session_state["categorized_files"]]:
+                st.session_state["categorized_files"].append((file_name, categorized_df))
+                st.session_state["processed_files"].add(file_name)
+
             st.success("✅ Categorization completed!")
             if success_animation:
                 st_lottie(success_animation, height=150, key="success")
 
         st.markdown("### 📊 Preview of Categorized Files")
         for file_name, categorized_df in st.session_state["categorized_files"]:
+            categorized_df = remove_duplicates(categorized_df)
             st.subheader(f"📄 {file_name}")
             st.dataframe(categorized_df.head(10), use_container_width=True)
 
@@ -234,6 +243,7 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
                 try:
                     statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
                     categorized_df = categorize_statement(statement_df, master_df)
+                    categorized_df = remove_duplicates(categorized_df)
                     st.session_state["categorized_files"].append((f"Categorized_{file.name}", categorized_df))
                     st.session_state["processed_files"].add(file.name)
                     st.success(f"✅ {file.name} categorized successfully!")
@@ -245,6 +255,7 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "w") as zipf:
                 for file_name, categorized_df in st.session_state["categorized_files"]:
+                    categorized_df = remove_duplicates(categorized_df)
                     file_buffer = io.BytesIO()
                     categorized_df.to_excel(file_buffer, index=False)
                     file_buffer.seek(0)
