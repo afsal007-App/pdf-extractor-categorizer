@@ -122,7 +122,12 @@ with tabs[0]:
     st.header("PDF to Excel Converter")
     st.write("Upload your PDF statements to convert them into Excel format with calculated balances.")
 
-    uploaded_pdfs = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
+    uploaded_pdfs = st.file_uploader(
+        "Upload PDF files",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="pdf_file_uploader"
+    )
 
     if uploaded_pdfs:
         all_transactions = []
@@ -144,24 +149,30 @@ with tabs[0]:
             df = df.dropna(subset=["Date", "Amount (Incl. VAT)"]).reset_index(drop=True)
 
             # Calculate balance
-            opening_balance = st.number_input("Enter Opening Balance:", value=0.0, step=0.01)
+            opening_balance = st.number_input(
+                "Enter Opening Balance:",
+                value=0.0,
+                step=0.01,
+                key="opening_balance_input"
+            )
             df['Calculated Balance'] = opening_balance + df['Amount (Incl. VAT)'].cumsum()
 
             st.success("Transactions extracted successfully!")
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, use_container_width=True, key="extracted_transactions_df")
 
-            # ✅ "Prepare for Categorization" button
-            if st.button("Prepare for Categorization"):
+            # ✅ "Prepare for Categorization" button with unique key
+            if st.button("Prepare for Categorization", key="prepare_categorization_btn"):
                 st.session_state['converted_file'] = df
                 st.success("File ready for categorization! Navigate to the 'Categorization' tab.")
 
-            # Download option
+            # ✅ Download button with unique key
             output = save_to_excel(df)
             st.download_button(
                 label="Download Converted Excel",
                 data=output,
                 file_name="converted_transactions.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="converted_excel_download"
             )
         else:
             st.warning("No transactions found.")
@@ -180,33 +191,40 @@ with tabs[1]:
     if master_df.empty:
         st.error("Master categorization file could not be loaded.")
     else:
-        uploaded_excels = st.file_uploader("Upload Excel/CSV files", type=["xlsx", "csv"], accept_multiple_files=True)
+        uploaded_excels = st.file_uploader(
+            "Upload Excel/CSV files",
+            type=["xlsx", "csv"],
+            accept_multiple_files=True,
+            key="excel_file_uploader"
+        )
         files_to_categorize = list(uploaded_excels) if uploaded_excels else []
 
         # ✅ Include converted file from session state
         if st.session_state.get('converted_file') is not None:
-            if st.checkbox("Include converted file from PDF to Excel Converter"):
+            if st.checkbox("Include converted file from PDF to Excel Converter", key="include_converted_checkbox"):
                 files_to_categorize.append(st.session_state['converted_file'])
 
         if files_to_categorize:
-            for file in files_to_categorize:
-                # Load DataFrame directly if it's from session_state
+            for idx, file in enumerate(files_to_categorize):
+                # Load DataFrame directly if from session state
                 df = file if isinstance(file, pd.DataFrame) else pd.read_excel(file)
                 desc_col = find_description_column(df.columns)
 
                 if desc_col:
                     categorized_df = categorize_statement(df, master_df, desc_col)
-                    st.subheader("Categorized Transactions Preview")
-                    st.dataframe(categorized_df.head(), use_container_width=True)
+                    st.subheader(f"Categorized Transactions Preview - File {idx + 1}")
+                    st.dataframe(categorized_df.head(), use_container_width=True, key=f"categorized_df_{idx}")
 
+                    # ✅ Download button with unique key
                     output = save_to_excel(categorized_df)
                     st.download_button(
-                        label="Download Categorized File",
+                        label=f"Download Categorized File {idx + 1}",
                         data=output,
-                        file_name="categorized_transactions.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        file_name=f"categorized_file_{idx + 1}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"categorized_download_{idx}"
                     )
                 else:
-                    st.error("No description column found.")
+                    st.error(f"No description column found in file {idx + 1}.")
         else:
             st.info("Upload files or select the converted file to begin categorization.")
