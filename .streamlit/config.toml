@@ -1,9 +1,6 @@
 [theme]
-primaryColor = "#3498db"
-backgroundColor = "#141e30"
-secondaryBackgroundColor = "#243b55"
-textColor = "#e0e0e0"
+primaryColor = "#4F46E5"
+backgroundColor = "#F9FAFB"
+secondaryBackgroundColor = "#E0E7FF"
+textColor = "#111827"
 font = "sans serif"
-
-[client]
-toolbarMode = "minimal"  # Hides the GitHub icon while keeping essential options
