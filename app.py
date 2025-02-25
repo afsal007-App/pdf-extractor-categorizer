@@ -57,6 +57,7 @@ def load_lottieurl(url: str):
 upload_animation = load_lottieurl("https://assets1.lottiefiles.com/packages/lf20_puciaact.json")
 process_animation = load_lottieurl("https://assets6.lottiefiles.com/private_files/lf30_6xiyzbtp.json")
 success_animation = load_lottieurl("https://assets7.lottiefiles.com/packages/lf20_4kgj19pg.json")
+reset_animation = load_lottieurl("https://assets2.lottiefiles.com/packages/lf20_ovvdxqph.json")
 
 # ✅ Master categorization file URL
 MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1I_Fz3slHP1mnfsKKgAFl54tKvqlo65Ug/export?format=xlsx"
@@ -110,13 +111,16 @@ def categorize_statement(df, master_df):
 def remove_duplicates(df):
     return df.drop_duplicates(subset=["Date", "Description", "Amount"])
 
-def reset_converter():
+def reset_converter_section():
     st.session_state["converted_df"] = None
     st.session_state["auto_categorize"] = False
+    st.session_state["processed_files"] = set()
+    st.success("✅ PDF to Excel Converter section has been reset.")
 
-def reset_categorization():
+def reset_categorization_section():
     st.session_state["categorized_files"] = {}
     st.session_state["processed_files"] = set()
+    st.success("✅ Categorization section has been reset.")
 
 # -------------------- 🗂️ Vertical Sidebar with Buttons --------------------
 st.sidebar.title("🚀 Navigation")
@@ -143,8 +147,8 @@ if st.session_state["active_tab"] == "PDF to Excel Converter":
 
     with col2:
         st.subheader("⚙️ Options")
-        if st.button("🔄 Reset Converter"):
-            reset_converter()
+        if st.button("♻️ Reset Converter Section"):
+            reset_converter_section()
             st.rerun()
 
     if uploaded_files:
@@ -177,7 +181,7 @@ if st.session_state["active_tab"] == "PDF to Excel Converter":
                 use_container_width=True
             )
 
-            if st.button("➡️ Proceed to Categorization", use_container_width=True):
+            if st.button("➡️ Proceed to Categorization"):
                 st.session_state["converted_df"] = df
                 st.session_state["auto_categorize"] = True
                 st.session_state["active_tab"] = "Categorization Pilot"
@@ -189,8 +193,8 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
 
     col1, col2 = st.columns([3, 1])
     with col2:
-        if st.button("🔄 Reset Categorization"):
-            reset_categorization()
+        if st.button("♻️ Reset Categorization Section"):
+            reset_categorization_section()
             st.rerun()
 
     master_df = load_master_file()
@@ -203,17 +207,18 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
             categorized_df = remove_duplicates(categorized_df)
 
             file_name = "Converted_Categorized_Statement.xlsx"
-
-            # Update or add the categorized file to avoid duplicates
             st.session_state["categorized_files"][file_name] = categorized_df
             st.success("✅ Categorization completed!")
             if success_animation:
                 st_lottie(success_animation, height=150, key="success")
 
         st.markdown("### 📊 Preview of Categorized Files")
-        for file_name, categorized_df in st.session_state["categorized_files"].items():
-            st.subheader(f"📄 {file_name}")
-            st.dataframe(remove_duplicates(categorized_df).head(10), use_container_width=True)
+        if st.session_state["categorized_files"]:
+            for file_name, categorized_df in st.session_state["categorized_files"].items():
+                st.subheader(f"📄 {file_name}")
+                st.dataframe(remove_duplicates(categorized_df).head(10), use_container_width=True)
+        else:
+            st.info("👆 No categorized files to preview. Upload or convert files to see them here.")
 
         st.markdown("### 📂 Upload Additional Files for Categorization")
         uploaded_files = st.file_uploader(
@@ -234,8 +239,7 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
 
                     categorized_df = categorize_statement(statement_df, master_df)
                     categorized_df = remove_duplicates(categorized_df)
-                    
-                    # Add or update categorized files dictionary
+
                     st.session_state["categorized_files"][f"Categorized_{file.name}"] = categorized_df
                     st.success(f"✅ {file.name} categorized successfully!")
                 except Exception as e:
@@ -260,3 +264,5 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
                 mime="application/zip",
                 use_container_width=True
             )
+        else:
+            st.info("👆 No files to download. Please upload or convert files first.")
