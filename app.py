@@ -34,7 +34,7 @@ if "converted_df" not in st.session_state:
 if "auto_categorize" not in st.session_state:
     st.session_state["auto_categorize"] = False
 if "active_tab" not in st.session_state:
-    st.session_state["active_tab"] = "📄 PDF to Excel Converter"
+    st.session_state["active_tab"] = "PDF to Excel Converter"
 if "categorized_files" not in st.session_state:
     st.session_state["categorized_files"] = []
 
@@ -87,14 +87,22 @@ def reset_converter():
 def reset_categorization():
     st.session_state["categorized_files"] = []
 
-# -------------------- 🗂️ Navigation --------------------
+# -------------------- 🗂️ Vertical Sidebar with Buttons --------------------
 st.sidebar.title("🚀 Navigation")
-tab_options = ["📄 PDF to Excel Converter", "📂 Categorization Pilot"]
-selected_tab = st.sidebar.radio("Select a section:", tab_options, index=tab_options.index(st.session_state["active_tab"]))
-st.session_state["active_tab"] = selected_tab
+
+nav_options = {
+    "PDF to Excel Converter": "📝 PDF to Excel Converter",
+    "Categorization Pilot": "📂 Categorization Pilot"
+}
+
+for page, label in nav_options.items():
+    button_style = "width: 100%; padding: 10px; margin-bottom: 10px; font-size: 16px; border-radius: 10px;"
+    if st.sidebar.button(label, key=page, help=f"Navigate to {label}", use_container_width=True):
+        st.session_state["active_tab"] = page
+        st.rerun()
 
 # -------------------- 📄 PDF to Excel Converter --------------------
-if selected_tab == "📄 PDF to Excel Converter":
+if st.session_state["active_tab"] == "PDF to Excel Converter":
     st.title("📝 PDF to Excel Converter")
 
     col1, col2 = st.columns([3, 1])
@@ -141,11 +149,11 @@ if selected_tab == "📄 PDF to Excel Converter":
             if st.button("➡️ Proceed to Categorization", use_container_width=True):
                 st.session_state["converted_df"] = df
                 st.session_state["auto_categorize"] = True
-                st.session_state["active_tab"] = "📂 Categorization Pilot"
+                st.session_state["active_tab"] = "Categorization Pilot"
                 st.rerun()
 
 # -------------------- 📂 Categorization Pilot --------------------
-elif selected_tab == "📂 Categorization Pilot":
+elif st.session_state["active_tab"] == "Categorization Pilot":
     st.title("📂 Categorization Pilot")
 
     col1, col2 = st.columns([3, 1])
