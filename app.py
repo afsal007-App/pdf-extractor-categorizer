@@ -103,7 +103,7 @@ if selected_tab == "📄 PDF to Excel Converter":
     with col2:
         if st.button("🔄 Reset"):
             reset_converter()
-            st.experimental_rerun()
+            st.rerun()
 
     if uploaded_files:
         all_transactions = []
@@ -137,7 +137,7 @@ if selected_tab == "📄 PDF to Excel Converter":
                 st.session_state["converted_df"] = df
                 st.session_state["auto_categorize"] = True
                 st.session_state["active_tab"] = "📂 Categorization Pilot"
-                st.experimental_rerun()
+                st.rerun()
 
 # -------------------- 📂 Categorization Pilot --------------------
 elif selected_tab == "📂 Categorization Pilot":
@@ -147,7 +147,7 @@ elif selected_tab == "📂 Categorization Pilot":
     with col2:
         if st.button("🔄 Reset"):
             reset_categorization()
-            st.experimental_rerun()
+            st.rerun()
 
     master_df = load_master_file()
     if master_df.empty:
