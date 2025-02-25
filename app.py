@@ -16,7 +16,7 @@ def clean_text(text):
     return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
 
 def extract_wio_transactions(pdf_file):
-    """Improved extraction for Wio Bank statements."""
+    """Improved extraction for Wio Bank statements with validation."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
@@ -36,20 +36,26 @@ def extract_wio_transactions(pdf_file):
                     ref_number_match = re.search(r'(P\d{9})', remainder)
                     ref_number = ref_number_match.group(1) if ref_number_match else ""
                     numbers = re.findall(amount_pattern, remainder)
+
+                    # Skip if no amounts found
+                    if len(numbers) < 1:
+                        continue
+
                     amount = numbers[-2] if len(numbers) >= 2 else ""
                     running_balance = numbers[-1] if len(numbers) >= 1 else ""
 
+                    # Extract and clean description
                     description = remainder
                     for item in [ref_number, amount, running_balance]:
                         if item:
                             description = description.replace(item, '').strip()
 
                     transactions.append([
-                        date,
-                        ref_number,
-                        description,
-                        amount.replace(',', ''),
-                        running_balance.replace(',', '')
+                        date.strip(),
+                        ref_number.strip(),
+                        description.strip(),
+                        amount.replace(',', '').strip(),
+                        running_balance.replace(',', '').strip()
                     ])
     return transactions
 
@@ -119,18 +125,16 @@ with tabs[0]:
         if all_transactions:
             columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
             df = pd.DataFrame(all_transactions, columns=columns)
+
+            # Clean and convert columns
             df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
-            
-            # ✅ Safe conversion with error handling
-            df['Amount (Incl. VAT)'] = pd.to_numeric(
-                df['Amount (Incl. VAT)'].replace({',': ''}, regex=True), errors='coerce'
-            )
-            df['Running Balance (Extracted)'] = pd.to_numeric(
-                df['Running Balance (Extracted)'].replace({',': ''}, regex=True), errors='coerce'
-            )
+            df['Amount (Incl. VAT)'] = pd.to_numeric(df['Amount (Incl. VAT)'], errors='coerce')
+            df['Running Balance (Extracted)'] = pd.to_numeric(df['Running Balance (Extracted)'], errors='coerce')
 
-            df = df.dropna(subset=["Date"]).sort_values(by="Date").reset_index(drop=True)
+            # Remove rows with missing essential data
+            df = df.dropna(subset=["Date", "Amount (Incl. VAT)"]).reset_index(drop=True)
 
+            # Calculate balance
             opening_balance = st.number_input("Enter Opening Balance:", value=0.0, step=0.01)
             df['Calculated Balance'] = opening_balance + df['Amount (Incl. VAT)'].cumsum()
 
