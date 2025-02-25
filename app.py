@@ -29,29 +29,20 @@ def extract_wio_transactions(pdf_file):
 
             lines = text.strip().split('\n')
             for line in lines:
-                # Match date at the beginning of the line
                 date_match = re.match(date_pattern, line)
                 if date_match:
                     date = date_match.group(1)
                     remainder = line[len(date):].strip()
-
-                    # Extract reference number
                     ref_number_match = re.search(r'(P\d{9})', remainder)
                     ref_number = ref_number_match.group(1) if ref_number_match else ""
-
-                    # Extract amounts from the end of the line
                     numbers = re.findall(amount_pattern, remainder)
                     amount = numbers[-2] if len(numbers) >= 2 else ""
                     running_balance = numbers[-1] if len(numbers) >= 1 else ""
 
-                    # Extract description (by removing known patterns)
                     description = remainder
-                    if ref_number:
-                        description = description.replace(ref_number, "").strip()
-                    if amount:
-                        description = description.replace(amount, "").strip()
-                    if running_balance:
-                        description = description.replace(running_balance, "").strip()
+                    for item in [ref_number, amount, running_balance]:
+                        if item:
+                            description = description.replace(item, '').strip()
 
                     transactions.append([
                         date,
@@ -98,7 +89,7 @@ def load_master_file():
 st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
 tabs = st.tabs(["PDF to Excel Converter", "Categorization"])
 
-# Session State Initialization
+# Initialize session state
 if 'converted_file' not in st.session_state:
     st.session_state['converted_file'] = None
 
@@ -107,8 +98,6 @@ if 'converted_file' not in st.session_state:
 # ---------------------------
 with tabs[0]:
     st.header("PDF to Excel Converter")
-    bank_options = ["Wio Bank"]
-    selected_bank = st.selectbox("Select Bank:", bank_options)
     uploaded_pdfs = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
 
     if uploaded_pdfs:
@@ -134,16 +123,19 @@ with tabs[0]:
             st.success("Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
 
-            # Store converted file in session state for categorization
             if st.button("Prepare for Categorization"):
                 st.session_state['converted_file'] = df
                 st.success("File ready for categorization!")
 
-            # Download button for the converted Excel file
             output = io.BytesIO()
             df.to_excel(output, index=False)
             output.seek(0)
-            st.download_button("Download Converted Excel", data=output, file_name="converted_transactions.xlsx")
+            st.download_button(
+                label="⬇️ Download Excel",
+                data=output,
+                file_name="converted_transactions.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         else:
             st.warning("No transactions found.")
     else:
@@ -162,7 +154,6 @@ with tabs[1]:
         uploaded_excels = st.file_uploader("Upload Excel/CSV files for categorization", type=["xlsx", "csv"], accept_multiple_files=True)
         files_to_categorize = uploaded_excels or []
 
-        # Include converted file from the previous tab if available
         if st.session_state['converted_file'] is not None:
             if st.button("Add Converted File to Categorization"):
                 files_to_categorize = [st.session_state['converted_file']]
@@ -183,11 +174,11 @@ with tabs[1]:
                     buffer.seek(0)
                     categorized_files.append((file if isinstance(file, pd.DataFrame) else file.name, buffer))
 
-                    st.success(f"{file if isinstance(file, pd.DataFrame) else file.name} categorized successfully.")
+                    st.success("Categorization completed.")
                     st.dataframe(categorized_df.head(), use_container_width=True)
 
                     st.download_button(
-                        label=f"Download Categorized {file if isinstance(file, pd.DataFrame) else file.name}",
+                        label="⬇️ Download Categorized File",
                         data=buffer,
                         file_name=f"Categorized_{file if isinstance(file, pd.DataFrame) else file.name}",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -195,7 +186,6 @@ with tabs[1]:
                 else:
                     st.error(f"No description column found in {file if isinstance(file, pd.DataFrame) else file.name}.")
 
-            # ZIP download option if multiple files are categorized
             if len(categorized_files) > 1:
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "w") as zipf:
@@ -204,7 +194,7 @@ with tabs[1]:
                 zip_buffer.seek(0)
 
                 st.download_button(
-                    label="Download All Categorized Files as ZIP",
+                    label="⬇️ Download All as ZIP",
                     data=zip_buffer,
                     file_name="Categorized_Files.zip",
                     mime="application/zip"
