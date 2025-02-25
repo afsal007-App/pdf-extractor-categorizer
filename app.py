@@ -15,6 +15,8 @@ if "converted_df" not in st.session_state:
     st.session_state["converted_df"] = None
 if "auto_categorize" not in st.session_state:
     st.session_state["auto_categorize"] = False
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = "📄 PDF to Excel Converter"
 
 # 🧹 Helper functions
 def load_master_file():
@@ -58,12 +60,13 @@ def categorize_statement(df, master_df):
     )
     return df
 
-# -------------------- 🗂️ Tabs --------------------
+# -------------------- 🗂️ Navigation --------------------
 tab_labels = ["📄 PDF to Excel Converter", "📂 Categorization Pilot"]
-tabs = st.tabs(tab_labels)
+selected_tab = st.radio("Select a tab:", tab_labels, index=tab_labels.index(st.session_state["active_tab"]))
+st.session_state["active_tab"] = selected_tab
 
 # -------------------- 📄 PDF to Excel Converter --------------------
-with tabs[0]:
+if selected_tab == "📄 PDF to Excel Converter":
     st.header("📄 PDF to Excel Converter")
 
     uploaded_files = st.file_uploader("📤 Upload PDF files", type=["pdf"], accept_multiple_files=True)
@@ -98,10 +101,11 @@ with tabs[0]:
             if st.button("➡️ Categorize Converted Statement"):
                 st.session_state["converted_df"] = df
                 st.session_state["auto_categorize"] = True
+                st.session_state["active_tab"] = "📂 Categorization Pilot"
                 st.rerun()
 
 # -------------------- 📂 Categorization Pilot --------------------
-with tabs[1]:
+elif selected_tab == "📂 Categorization Pilot":
     st.header("📂 Categorization Pilot")
 
     master_df = load_master_file()
