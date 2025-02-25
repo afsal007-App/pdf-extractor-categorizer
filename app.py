@@ -6,7 +6,7 @@ import re
 import io
 import zipfile
 
-# ✅ Streamlit Page Configuration (MUST be first Streamlit command)
+# ✅ Streamlit Page Configuration
 st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
 
 # ---------------------------
@@ -90,12 +90,21 @@ def load_master_file():
         st.error(f"Error loading master file: {e}")
         return pd.DataFrame()
 
-def save_to_excel(df):
+def save_to_excel(df, filename="output.xlsx"):
     """Save DataFrame to Excel and return as BytesIO."""
     buffer = io.BytesIO()
     df.to_excel(buffer, index=False)
     buffer.seek(0)
     return buffer
+
+def save_multiple_files_to_zip(file_buffers):
+    """Create a ZIP archive from multiple files."""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as zipf:
+        for filename, file_buffer in file_buffers:
+            zipf.writestr(filename, file_buffer.getvalue())
+    zip_buffer.seek(0)
+    return zip_buffer
 
 # ---------------------------
 # UI Setup
@@ -166,7 +175,7 @@ with tabs[0]:
                 st.success("File ready for categorization! Navigate to the 'Categorization' tab.")
 
             # ✅ Download button with unique key
-            output = save_to_excel(df)
+            output = save_to_excel(df, filename="converted_transactions.xlsx")
             st.download_button(
                 label="Download Converted Excel",
                 data=output,
@@ -202,29 +211,47 @@ with tabs[1]:
         # ✅ Include converted file from session state
         if st.session_state.get('converted_file') is not None:
             if st.checkbox("Include converted file from PDF to Excel Converter", key="include_converted_checkbox"):
-                files_to_categorize.append(st.session_state['converted_file'])
+                files_to_categorize.append(("Converted_File.xlsx", st.session_state['converted_file']))
+
+        categorized_files = []
 
         if files_to_categorize:
-            for idx, file in enumerate(files_to_categorize):
-                # Load DataFrame directly if from session state
-                df = file if isinstance(file, pd.DataFrame) else pd.read_excel(file)
-                desc_col = find_description_column(df.columns)
+            for idx, file_info in enumerate(files_to_categorize):
+                if isinstance(file_info, tuple):  # From session state
+                    filename, df = file_info
+                else:
+                    filename = file_info.name
+                    df = pd.read_excel(file_info) if filename.endswith('xlsx') else pd.read_csv(file_info)
 
+                desc_col = find_description_column(df.columns)
                 if desc_col:
                     categorized_df = categorize_statement(df, master_df, desc_col)
-                    st.subheader(f"Categorized Transactions Preview - File {idx + 1}")
+                    st.subheader(f"Categorized Transactions Preview - {filename}")
                     st.dataframe(categorized_df.head(), use_container_width=True, key=f"categorized_df_{idx}")
 
-                    # ✅ Download button with unique key
-                    output = save_to_excel(categorized_df)
+                    buffer = save_to_excel(categorized_df, filename=f"Categorized_{filename}")
+                    categorized_files.append((f"Categorized_{filename}", buffer))
+
+                    # ✅ Individual download button
                     st.download_button(
-                        label=f"Download Categorized File {idx + 1}",
-                        data=output,
-                        file_name=f"categorized_file_{idx + 1}.xlsx",
+                        label=f"Download {filename}",
+                        data=buffer,
+                        file_name=f"Categorized_{filename}",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key=f"categorized_download_{idx}"
+                        key=f"download_categorized_{idx}"
                     )
                 else:
-                    st.error(f"No description column found in file {idx + 1}.")
+                    st.error(f"No description column found in {filename}.")
+
+            # ✅ ZIP Download Button for multiple categorized files
+            if len(categorized_files) > 1:
+                zip_buffer = save_multiple_files_to_zip(categorized_files)
+                st.download_button(
+                    label="Download All Categorized Files (ZIP)",
+                    data=zip_buffer,
+                    file_name="Categorized_Files.zip",
+                    mime="application/zip",
+                    key="download_all_categorized_zip"
+                )
         else:
             st.info("Upload files or select the converted file to begin categorization.")
