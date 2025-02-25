@@ -111,6 +111,13 @@ def extract_wio_transactions(pdf_file):
     return transactions
 
 def categorize_statement(df, master_df):
+    required_columns = ["Date", "Ref. Number", "Description", "Amount", "Running Balance"]
+    missing_cols = [col for col in required_columns if col not in df.columns]
+    
+    if missing_cols:
+        st.error(f"❌ The uploaded file is missing required columns: {', '.join(missing_cols)}.")
+        return pd.DataFrame()
+
     df['Categorization'] = df['Description'].apply(
         lambda desc: next((row['Category'] for _, row in master_df.iterrows() if row['Key Word'] in desc.lower()), "Uncategorized")
     )
@@ -210,16 +217,18 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
         if st.session_state["auto_categorize"] and st.session_state["converted_df"] is not None:
             df_to_categorize = st.session_state["converted_df"]
             categorized_df = categorize_statement(df_to_categorize, master_df)
-            categorized_df = remove_duplicates(categorized_df)
-            file_name = "Converted_Categorized_Statement.xlsx"
 
-            if file_name not in [file[0] for file in st.session_state["categorized_files"]]:
-                st.session_state["categorized_files"].append((file_name, categorized_df))
-                st.session_state["processed_files"].add(file_name)
-
-            st.success("✅ Categorization completed!")
-            if success_animation:
-                st_lottie(success_animation, height=150, key="success")
+            if not categorized_df.empty:
+                categorized_df = remove_duplicates(categorized_df)
+                file_name = "Converted_Categorized_Statement.xlsx"
+                
+                if file_name not in [file[0] for file in st.session_state["categorized_files"]]:
+                    st.session_state["categorized_files"].append((file_name, categorized_df))
+                    st.session_state["processed_files"].add(file_name)
+                
+                st.success("✅ Categorization completed!")
+                if success_animation:
+                    st_lottie(success_animation, height=150, key="success")
 
         st.markdown("### 📊 Preview of Categorized Files")
         for file_name, categorized_df in st.session_state["categorized_files"]:
@@ -242,6 +251,14 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
                     continue
                 try:
                     statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+                    
+                    required_columns = ["Date", "Ref. Number", "Description", "Amount", "Running Balance"]
+                    missing_cols = [col for col in required_columns if col not in statement_df.columns]
+
+                    if missing_cols:
+                        st.error(f"❌ {file.name} is missing required columns: {', '.join(missing_cols)}. Please correct the file.")
+                        continue
+
                     categorized_df = categorize_statement(statement_df, master_df)
                     categorized_df = remove_duplicates(categorized_df)
                     st.session_state["categorized_files"].append((f"Categorized_{file.name}", categorized_df))
