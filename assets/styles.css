@@ -1,10 +1,11 @@
+/* Minimal, clean styling for buttons and text */
 .stButton>button {
     background-color: #4F46E5;
     color: white;
-    border-radius: 10px;
-    padding: 10px 20px;
-    font-size: 16px;
-    transition: background-color 0.3s ease;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
 }
 
 .stButton>button:hover {
@@ -12,14 +13,9 @@
 }
 
 h1, h2, h3 {
-    color: #1F2937;
-}
-
-.reportview-container {
-    background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
+    color: #333333;
 }
 
 .stDataFrame {
-    border-radius: 10px;
-    overflow: hidden;
+    border-radius: 6px;
 }
