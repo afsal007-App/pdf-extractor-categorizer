@@ -95,26 +95,33 @@ def extract_wio_transactions(pdf_file):
     transactions = []
     with pdfplumber.open(pdf_file) as pdf:
         for page_num, page in enumerate(pdf.pages):
-            text = page.extract_text()
-            if not text:
-                continue
-            lines = text.strip().split('\n')
-            for line_num, line in enumerate(lines):
-                date_match = re.match(r'(\d{2}/\d{2}/\d{4})', line)
-                if date_match:
-                    date = date_match.group(1)
-                    remainder = line[len(date):].strip()
+            try:
+                tables = page.extract_tables()
+                if not tables:
+                    st.warning(f"⚠️ No tables found on page {page_num + 1}")
+                    continue
 
-                    ref_number_match = re.search(r'(?:Ref(?:erence)? Number[:\s]*)?(\w+)', remainder)
-                    ref_number = ref_number_match.group(1) if ref_number_match else ""
-
-                    numbers = re.findall(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', remainder)
-                    amount = float(numbers[-2].replace(',', '')) if len(numbers) >= 2 else 0.0
-                    balance = float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.0
-
-                    description = re.sub(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', '', remainder).replace(ref_number, '').strip()
-
-                    transactions.append([date, ref_number, description, amount, balance])
+                for table_num, table in enumerate(tables):
+                    for row_num, row in enumerate(table):
+                        if len(row) >= 5:
+                            date, ref_number, description, amount, balance = row[:5]
+                            try:
+                                date = pd.to_datetime(date, format='%d/%m/%Y', errors='coerce')
+                                amount = float(str(amount).replace(',', '').replace(' ', '').replace('−', '-')) if amount else 0.0
+                                balance = float(str(balance).replace(',', '').replace(' ', '').replace('−', '-')) if balance else 0.0
+                                transactions.append([
+                                    date.strftime('%d/%m/%Y') if pd.notnull(date) else '',
+                                    ref_number.strip(),
+                                    description.strip(),
+                                    amount,
+                                    balance
+                                ])
+                            except Exception as e:
+                                st.error(f"⚠️ Error parsing row {row_num + 1} on page {page_num + 1}: {e}")
+                        else:
+                            st.warning(f"⚠️ Incomplete row data on page {page_num + 1}, row {row_num + 1}: {row}")
+            except Exception as e:
+                st.error(f"⚠️ Error processing page {page_num + 1}: {e}")
 
     return transactions
 
