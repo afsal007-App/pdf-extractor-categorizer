@@ -6,13 +6,9 @@ import io
 import zipfile
 from streamlit_lottie import st_lottie
 import requests
-from st_pages import add_page_title, show_pages_from_config
-from streamlit_extras.switch_page_button import switch_page
-from streamlit_extras.app_logo import add_logo
 
 # ✅ Set page configuration
 st.set_page_config(page_title="📊 Financial Statement Tool", layout="wide", page_icon="💰")
-add_page_title("📊 Financial Statement Tool")
 
 # ✅ Load Lottie animation with error handling
 def load_lottieurl(url: str):
@@ -91,19 +87,16 @@ def reset_converter():
 def reset_categorization():
     st.session_state["categorized_files"] = []
 
-# -------------------- 🗂️ Sidebar Navigation --------------------
-st.sidebar.title("🚀 Quick Navigation")
-show_pages_from_config()
-add_logo("https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Finance_logo.svg/1024px-Finance_logo.svg.png")
-
-with st.sidebar.expander("🔧 Settings"):
-    theme_option = st.radio("Theme:", ["Light", "Dark", "Auto"], index=2)
-    st.markdown(f"Current theme: **{theme_option}**")
+# -------------------- 🗂️ Navigation --------------------
+st.sidebar.title("🚀 Navigation")
+tab_options = ["📄 PDF to Excel Converter", "📂 Categorization Pilot"]
+selected_tab = st.sidebar.radio("Select a section:", tab_options, index=tab_options.index(st.session_state["active_tab"]))
+st.session_state["active_tab"] = selected_tab
 
 # -------------------- 📄 PDF to Excel Converter --------------------
-if st.session_state["active_tab"] == "📄 PDF to Excel Converter":
+if selected_tab == "📄 PDF to Excel Converter":
     st.title("📝 PDF to Excel Converter")
-    
+
     col1, col2 = st.columns([3, 1])
     with col1:
         if upload_animation:
@@ -152,7 +145,7 @@ if st.session_state["active_tab"] == "📄 PDF to Excel Converter":
                 st.rerun()
 
 # -------------------- 📂 Categorization Pilot --------------------
-elif st.session_state["active_tab"] == "📂 Categorization Pilot":
+elif selected_tab == "📂 Categorization Pilot":
     st.title("📂 Categorization Pilot")
 
     col1, col2 = st.columns([3, 1])
