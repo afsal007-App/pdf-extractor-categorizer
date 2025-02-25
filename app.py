@@ -8,26 +8,29 @@ from streamlit_lottie import st_lottie
 import requests
 
 # ✅ Set page configuration
-st.set_page_config(page_title="📊 Financial Statement Tool", layout="wide", page_icon="💰")
+st.set_page_config(page_title="📊 Financial Statement Tool", layout="wide", page_icon="💵")
 
 # 🎨 Define color palette and styling
-PRIMARY_COLOR = "#4A90E2"
-SECONDARY_COLOR = "#F5F7FA"
-ACCENT_COLOR = "#50E3C2"
-TEXT_COLOR = "#333333"
+PRIMARY_COLOR = "#2C3E50"
+SECONDARY_COLOR = "#ECF0F1"
+ACCENT_COLOR = "#3498DB"
+WARNING_COLOR = "#E74C3C"
+SUCCESS_COLOR = "#27AE60"
+TEXT_COLOR = "#2C3E50"
 
 st.markdown(f"""
     <style>
         .stButton > button {{
             background-color: {PRIMARY_COLOR};
             color: white;
-            padding: 10px 16px;
-            border-radius: 12px;
-            font-size: 15px;
+            padding: 12px 20px;
+            border-radius: 20px;
+            font-size: 14px;
             font-weight: 600;
             width: 100%;
             border: none;
             cursor: pointer;
+            transition: all 0.3s ease;
         }}
         .stButton > button:hover {{
             background-color: {ACCENT_COLOR};
@@ -39,6 +42,9 @@ st.markdown(f"""
             padding: 1rem 2rem;
             background-color: {SECONDARY_COLOR};
             border-radius: 10px;
+        }}
+        .css-1q8dd3e {{
+            font-size: 16px;
         }}
     </style>
 """, unsafe_allow_html=True)
@@ -54,25 +60,26 @@ def load_lottieurl(url: str):
         return None
 
 # 🔄 Load animations
-upload_animation = load_lottieurl("https://assets1.lottiefiles.com/packages/lf20_puciaact.json")
-process_animation = load_lottieurl("https://assets6.lottiefiles.com/private_files/lf30_6xiyzbtp.json")
-success_animation = load_lottieurl("https://assets7.lottiefiles.com/packages/lf20_4kgj19pg.json")
-reset_animation = load_lottieurl("https://assets2.lottiefiles.com/packages/lf20_ovvdxqph.json")
+upload_animation = load_lottieurl("https://assets7.lottiefiles.com/packages/lf20_jcikwtux.json")
+success_animation = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_dyvyz7.json")
+reset_animation = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_twijbubv.json")
 
 # ✅ Master categorization file URL
 MASTER_SHEET_URL = "https://docs.google.com/spreadsheets/d/1I_Fz3slHP1mnfsKKgAFl54tKvqlo65Ug/export?format=xlsx"
 
 # 🔄 Initialize session state
-if "converted_df" not in st.session_state:
-    st.session_state["converted_df"] = None
-if "auto_categorize" not in st.session_state:
-    st.session_state["auto_categorize"] = False
-if "active_tab" not in st.session_state:
-    st.session_state["active_tab"] = "PDF to Excel Converter"
-if "categorized_files" not in st.session_state:
-    st.session_state["categorized_files"] = {}
-if "processed_files" not in st.session_state:
-    st.session_state["processed_files"] = set()
+def initialize_session_state():
+    if "converted_df" not in st.session_state:
+        st.session_state["converted_df"] = None
+    if "auto_categorize" not in st.session_state:
+        st.session_state["auto_categorize"] = False
+    if "active_tab" not in st.session_state:
+        st.session_state["active_tab"] = "PDF to Excel Converter"
+    if "categorized_files" not in st.session_state:
+        st.session_state["categorized_files"] = {}
+    if "uploaded_files" not in st.session_state:
+        st.session_state["uploaded_files"] = []
+initialize_session_state()
 
 # 🧹 Helper functions
 def load_master_file():
@@ -113,13 +120,12 @@ def remove_duplicates(df):
 
 def reset_converter_section():
     st.session_state["converted_df"] = None
+    st.session_state["uploaded_files"] = []
     st.session_state["auto_categorize"] = False
-    st.session_state["processed_files"] = set()
     st.success("✅ PDF to Excel Converter section has been reset.")
 
 def reset_categorization_section():
     st.session_state["categorized_files"] = {}
-    st.session_state["processed_files"] = set()
     st.success("✅ Categorization section has been reset.")
 
 # -------------------- 🗂️ Vertical Sidebar with Buttons --------------------
@@ -131,27 +137,28 @@ nav_options = {
 }
 
 for page, label in nav_options.items():
-    if st.sidebar.button(label, key=page, help=f"Navigate to {label}", use_container_width=True):
+    if st.sidebar.button(label, key=page, use_container_width=True):
         st.session_state["active_tab"] = page
         st.rerun()
 
 # -------------------- 📄 PDF to Excel Converter --------------------
 if st.session_state["active_tab"] == "PDF to Excel Converter":
-    st.header("PDF to Excel Converter", divider='rainbow')
+    st.header("📝 PDF to Excel Converter")
 
     col1, col2 = st.columns([3, 1])
     with col1:
         if upload_animation:
-            st_lottie(upload_animation, height=180, key="upload")
+            st_lottie(upload_animation, height=150, key="upload")
         uploaded_files = st.file_uploader("Upload PDF files:", type=["pdf"], accept_multiple_files=True)
 
     with col2:
         st.subheader("⚙️ Options")
         if st.button("♻️ Reset Converter Section"):
             reset_converter_section()
-            st.rerun()
+            st.experimental_rerun()
 
     if uploaded_files:
+        st.session_state["uploaded_files"] = uploaded_files
         all_transactions = []
         with st.spinner("🔍 Extracting transactions..."):
             for file in uploaded_files:
@@ -163,39 +170,38 @@ if st.session_state["active_tab"] == "PDF to Excel Converter":
         if all_transactions:
             df = pd.DataFrame(all_transactions, columns=["Date", "Description", "Amount", "Source File"])
             df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors="coerce")
-            df = df.dropna(subset=["Date"]).sort_values(by="Date").reset_index(drop=True)
             df = remove_duplicates(df)
 
+            st.session_state["converted_df"] = df
             st.success(f"✅ Extracted {len(df)} unique transactions!")
             st.dataframe(df, use_container_width=True, height=400)
 
-            excel_buffer = io.BytesIO()
-            df.to_excel(excel_buffer, index=False)
-            excel_buffer.seek(0)
+            buffer = io.BytesIO()
+            df.to_excel(buffer, index=False)
+            buffer.seek(0)
 
             st.download_button(
                 "📥 Download Converted Excel",
-                data=excel_buffer,
+                data=buffer,
                 file_name="Converted_Statement.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
 
             if st.button("➡️ Proceed to Categorization"):
-                st.session_state["converted_df"] = df
                 st.session_state["auto_categorize"] = True
                 st.session_state["active_tab"] = "Categorization Pilot"
-                st.rerun()
+                st.experimental_rerun()
 
 # -------------------- 📂 Categorization Pilot --------------------
 elif st.session_state["active_tab"] == "Categorization Pilot":
-    st.header("Categorization Pilot", divider='rainbow')
+    st.header("📂 Categorization Pilot")
 
     col1, col2 = st.columns([3, 1])
     with col2:
         if st.button("♻️ Reset Categorization Section"):
             reset_categorization_section()
-            st.rerun()
+            st.experimental_rerun()
 
     master_df = load_master_file()
     if master_df.empty:
@@ -206,19 +212,18 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
             categorized_df = categorize_statement(df_to_categorize, master_df)
             categorized_df = remove_duplicates(categorized_df)
 
-            file_name = "Converted_Categorized_Statement.xlsx"
-            st.session_state["categorized_files"][file_name] = categorized_df
+            st.session_state["categorized_files"]["Converted_Categorized_Statement.xlsx"] = categorized_df
             st.success("✅ Categorization completed!")
             if success_animation:
-                st_lottie(success_animation, height=150, key="success")
+                st_lottie(success_animation, height=120, key="success")
 
         st.markdown("### 📊 Preview of Categorized Files")
         if st.session_state["categorized_files"]:
             for file_name, categorized_df in st.session_state["categorized_files"].items():
                 st.subheader(f"📄 {file_name}")
-                st.dataframe(remove_duplicates(categorized_df).head(10), use_container_width=True)
+                st.dataframe(categorized_df.head(10), use_container_width=True)
         else:
-            st.info("👆 No categorized files to preview. Upload or convert files to see them here.")
+            st.info("👆 No categorized files available. Upload or convert files to categorize.")
 
         st.markdown("### 📂 Upload Additional Files for Categorization")
         uploaded_files = st.file_uploader(
@@ -230,16 +235,14 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
 
         if uploaded_files:
             for file in uploaded_files:
-                if file.name in st.session_state["categorized_files"]:
-                    st.warning(f"⚠️ {file.name} has already been categorized and previewed. Skipping duplicate.")
+                if f"Categorized_{file.name}" in st.session_state["categorized_files"]:
+                    st.warning(f"⚠️ {file.name} has already been categorized. Skipping duplicate.")
                     continue
                 try:
                     statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
                     statement_df = statement_df[[col for col in statement_df.columns if col in ["Date", "Description", "Amount"]]]
-
                     categorized_df = categorize_statement(statement_df, master_df)
                     categorized_df = remove_duplicates(categorized_df)
-
                     st.session_state["categorized_files"][f"Categorized_{file.name}"] = categorized_df
                     st.success(f"✅ {file.name} categorized successfully!")
                 except Exception as e:
@@ -250,11 +253,10 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "w") as zipf:
                 for file_name, categorized_df in st.session_state["categorized_files"].items():
-                    unique_df = remove_duplicates(categorized_df)
-                    file_buffer = io.BytesIO()
-                    unique_df.to_excel(file_buffer, index=False)
-                    file_buffer.seek(0)
-                    zipf.writestr(file_name, file_buffer.read())
+                    buffer = io.BytesIO()
+                    categorized_df.to_excel(buffer, index=False)
+                    buffer.seek(0)
+                    zipf.writestr(file_name, buffer.read())
 
             zip_buffer.seek(0)
             st.download_button(
@@ -265,4 +267,4 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
                 use_container_width=True
             )
         else:
-            st.info("👆 No files to download. Please upload or convert files first.")
+            st.info("👆 No files to download. Upload or convert files to see download options.")
