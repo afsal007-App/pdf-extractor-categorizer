@@ -94,23 +94,31 @@ def load_master_file():
 def extract_wio_transactions(pdf_file):
     transactions = []
     with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
+        for page_num, page in enumerate(pdf.pages):
             text = page.extract_text()
             if not text:
                 continue
-            for line in text.strip().split('\n'):
+            lines = text.strip().split('\n')
+            for line_num, line in enumerate(lines):
+                # Match the date format and extract fields
                 date_match = re.match(r'(\d{2}/\d{2}/\d{4})', line)
                 if date_match:
                     date = date_match.group(1)
                     remainder = line[len(date):].strip()
 
-                    # Extract Amount and Running Balance
+                    # Extract Ref. Number
+                    ref_number_match = re.search(r'(?:Ref(?:erence)? Number[:\s]*)?(\w+)', remainder)
+                    ref_number = ref_number_match.group(1) if ref_number_match else ""
+
+                    # Extract Amount (Incl. VAT) and Balance (AED)
                     numbers = re.findall(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', remainder)
                     amount = float(numbers[-2].replace(',', '')) if len(numbers) >= 2 else 0.0
-                    running_balance = float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.0
+                    balance = float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.0
 
-                    description = re.sub(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', '', remainder).strip()
-                    transactions.append([date, description, amount, running_balance])
+                    # Extract Description
+                    description = re.sub(r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?', '', remainder).replace(ref_number, '').strip()
+
+                    transactions.append([date, ref_number, description, amount, balance])
 
     return transactions
 
@@ -175,7 +183,7 @@ if st.session_state["active_tab"] == "PDF to Excel Converter":
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            df = pd.DataFrame(all_transactions, columns=["Date", "Description", "Amount", "Running Balance", "Source File"])
+            df = pd.DataFrame(all_transactions, columns=["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Balance (AED)", "Source File"])
             df["Date"] = pd.to_datetime(df["Date"], format="%d/%m/%Y", errors="coerce")
             df = calculate_calculated_balance(df)
 
@@ -246,7 +254,7 @@ elif st.session_state["active_tab"] == "Categorization Pilot":
                     continue
                 try:
                     statement_df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
-                    statement_df = statement_df[[col for col in statement_df.columns if col in ["Date", "Description", "Amount", "Running Balance"]]]
+                    statement_df = statement_df[[col for col in statement_df.columns if col in ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Balance (AED)"]]]
                     statement_df = calculate_calculated_balance(statement_df)
                     categorized_df = categorize_statement(statement_df, master_df)
                     st.session_state["categorized_files"][f"Categorized_{file.name}"] = categorized_df
