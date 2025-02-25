@@ -9,11 +9,11 @@ import zipfile
 # ---------------------------
 # Page Configuration & Styles
 # ---------------------------
-st.set_page_config(page_title="🎨 PDF & Excel Categorization Tool", layout="wide", page_icon="📊")
+st.set_page_config(page_title="📄 PDF & Excel Categorization Tool", layout="wide", page_icon="📊")
 
 st.markdown("""
 <style>
-/* Global Settings */
+/* Global Styles */
 html, body {
     background-color: #1a1c1e;
     font-family: 'Segoe UI', sans-serif;
@@ -69,17 +69,6 @@ h1, h2, h3 {
 
 .stTabs [data-baseweb="tab"]:hover {
     background-color: #44475a;
-}
-
-.stDataFrame {
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-.css-1q8dd3e {
-    background-color: #21222c;
-    padding: 15px;
-    border-radius: 12px;
 }
 
 </style>
@@ -161,10 +150,10 @@ if 'converted_file_json' not in st.session_state:
     st.session_state['converted_file_json'] = None
 
 # ---------------------------
-# User Interface Layout
+# UI Layout
 # ---------------------------
 st.title("🎨 PDF & Excel Categorization Tool")
-st.caption("✨ Convert PDF bank statements into beautifully categorized Excel sheets with ease!")
+st.caption("✨ Convert PDF bank statements into categorized Excel sheets with ease!")
 
 tabs = st.tabs(["🔄 PDF to Excel", "🏷️ Categorization"])
 
@@ -185,13 +174,9 @@ with tabs[0]:
                 transactions.extend(extracted)
 
         if transactions:
-            columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance", "Source File"]
-            df = pd.DataFrame(transactions, columns=columns)
+            df = pd.DataFrame(transactions, columns=["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance", "Source File"])
             df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
             df['Amount (Incl. VAT)'] = pd.to_numeric(df['Amount (Incl. VAT)'], errors='coerce')
-
-            opening_balance = st.number_input("💵 Enter Opening Balance:", value=0.0, step=0.01)
-            df['Calculated Balance'] = opening_balance + df['Amount (Incl. VAT)'].cumsum()
 
             st.success("✅ Data extracted successfully!")
             st.dataframe(df, use_container_width=True)
@@ -200,37 +185,5 @@ with tabs[0]:
                 st.session_state['converted_file_json'] = df.to_json()
                 st.success("📂 Saved for next step!")
 
-            st.download_button("⬇️ Download Excel", data=save_to_excel(df), file_name="transactions.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("⬇️ Download Excel", data=save_to_excel(df), file_name="transactions.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="download_excel")
 
-# ---------------------------
-# Categorization Tab
-# ---------------------------
-with tabs[1]:
-    st.header("🏷️ Categorize Your Transactions")
-    master_df = load_master_file()
-
-    if master_df.empty:
-        st.error("❌ Failed to load master file.")
-    else:
-        uploaded_excels = st.file_uploader("📥 Upload Excel/CSV files for categorization", type=["xlsx", "csv"], accept_multiple_files=True)
-        files = list(uploaded_excels)
-
-        if st.session_state['converted_file_json'] and st.checkbox("Include Converted File"):
-            files.append(pd.read_json(st.session_state['converted_file_json']))
-
-        if files:
-            for file in files:
-                df = file if isinstance(file, pd.DataFrame) else pd.read_excel(file)
-                desc_col = next((col for col in df.columns if 'description' in col.lower()), None)
-
-                if desc_col:
-                    categorized_df = categorize_statement(df, master_df, desc_col)
-                    st.subheader(f"📊 Preview:")
-                    st.dataframe(categorized_df.head(10), use_container_width=True)
-
-                    buffer = save_to_excel(categorized_df)
-                    st.download_button("⬇️ Download Categorized File", data=buffer, file_name="categorized_transactions.xlsx")
-                else:
-                    st.warning("⚠️ Description column not found.")
-        else:
-            st.info("ℹ️ Upload a file or select the converted file.")
