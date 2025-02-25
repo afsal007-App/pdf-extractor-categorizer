@@ -82,6 +82,13 @@ def load_master_file():
         st.error(f"Error loading master file: {e}")
         return pd.DataFrame()
 
+def save_to_excel(df):
+    """Save DataFrame to Excel and return as BytesIO."""
+    buffer = io.BytesIO()
+    df.to_excel(buffer, index=False)
+    buffer.seek(0)
+    return buffer
+
 # ---------------------------
 # Streamlit Interface
 # ---------------------------
@@ -125,13 +132,11 @@ with tabs[0]:
 
             if st.button("Prepare for Categorization"):
                 st.session_state['converted_file'] = df
-                st.success("File ready for categorization!")
+                st.success("Converted file added to categorization!")
 
-            output = io.BytesIO()
-            df.to_excel(output, index=False)
-            output.seek(0)
+            output = save_to_excel(df)
             st.download_button(
-                label="⬇️ Download Excel",
+                label="⬇️ Download Converted Excel",
                 data=output,
                 file_name="converted_transactions.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -152,40 +157,42 @@ with tabs[1]:
         st.error("Master categorization file could not be loaded.")
     else:
         uploaded_excels = st.file_uploader("Upload Excel/CSV files for categorization", type=["xlsx", "csv"], accept_multiple_files=True)
-        files_to_categorize = uploaded_excels or []
-
+        
+        # Files to categorize include uploaded files and converted file from previous section
+        files_to_categorize = list(uploaded_excels) if uploaded_excels else []
         if st.session_state['converted_file'] is not None:
-            if st.button("Add Converted File to Categorization"):
-                files_to_categorize = [st.session_state['converted_file']]
+            if st.checkbox("Include Converted File for Categorization"):
+                files_to_categorize.append(st.session_state['converted_file'])
 
         if files_to_categorize:
             categorized_files = []
             for file in files_to_categorize:
                 if isinstance(file, pd.DataFrame):
                     df = file
+                    filename = "Converted_File.xlsx"
                 else:
-                    df = pd.read_excel(file) if file.name.endswith('xlsx') else pd.read_csv(file)
+                    filename = file.name
+                    df = pd.read_excel(file) if filename.endswith('xlsx') else pd.read_csv(file)
 
                 desc_col = find_description_column(df.columns)
                 if desc_col:
                     categorized_df = categorize_statement(df, master_df, desc_col)
-                    buffer = io.BytesIO()
-                    categorized_df.to_excel(buffer, index=False)
-                    buffer.seek(0)
-                    categorized_files.append((file if isinstance(file, pd.DataFrame) else file.name, buffer))
+                    buffer = save_to_excel(categorized_df)
+                    categorized_files.append((filename, buffer))
 
-                    st.success("Categorization completed.")
+                    st.subheader(f"Preview: {filename}")
                     st.dataframe(categorized_df.head(), use_container_width=True)
 
                     st.download_button(
-                        label="⬇️ Download Categorized File",
+                        label=f"⬇️ Download {filename}",
                         data=buffer,
-                        file_name=f"Categorized_{file if isinstance(file, pd.DataFrame) else file.name}",
+                        file_name=f"Categorized_{filename}",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                 else:
-                    st.error(f"No description column found in {file if isinstance(file, pd.DataFrame) else file.name}.")
+                    st.error(f"No description column found in {filename}.")
 
+            # ZIP download if multiple files are categorized
             if len(categorized_files) > 1:
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "w") as zipf:
@@ -194,10 +201,10 @@ with tabs[1]:
                 zip_buffer.seek(0)
 
                 st.download_button(
-                    label="⬇️ Download All as ZIP",
+                    label="⬇️ Download All Categorized Files as ZIP",
                     data=zip_buffer,
                     file_name="Categorized_Files.zip",
                     mime="application/zip"
                 )
         else:
-            st.info("Upload files or use the converted file to begin categorization.")
+            st.info("Upload files or select the converted file to begin categorization.")
