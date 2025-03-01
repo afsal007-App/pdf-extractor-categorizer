@@ -14,7 +14,7 @@ st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
 # ---------------------------
 
 def extract_wio_transactions(pdf_file):
-    """Extract transactions from Wio Bank statements using IBAN-based currency mapping from the first page."""
+    """Extract transactions from Wio Bank statements using IBAN-based currency mapping."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
@@ -23,7 +23,7 @@ def extract_wio_transactions(pdf_file):
     balance_pattern = r'(AE\d{22})\s+[\d,]+\.\d{2}\s*([A-Z]{3})'  # Extracts IBAN, Balance, Currency
 
     account_currency_map = {}  # Stores { IBAN: Currency }
-    default_iban, default_currency = None, None  # Default IBAN & Currency
+    current_iban, current_currency = None, None  # Default IBAN & Currency
 
     with pdfplumber.open(pdf_file) as pdf:
         for page_num, page in enumerate(pdf.pages):
@@ -36,59 +36,53 @@ def extract_wio_transactions(pdf_file):
                 matches = re.findall(balance_pattern, text)
                 for match in matches:
                     account_currency_map[match[0]] = match[1]  # Store { IBAN: Currency }
-
                 print("DEBUG: Extracted IBAN & Currency Mapping:", account_currency_map)
 
-            # **Step 2: Extract Default IBAN & Currency from the Transaction Header**
+            # **Step 2: Detect Transaction Headers & Update IBAN and Currency**
             if "ACCOUNT NUMBER" in text and "IBAN" in text:
-                iban_match = re.search(iban_pattern, text)
-                currency_match = re.search(currency_pattern, text)
+                header_iban_match = re.search(iban_pattern, text)
+                header_currency_match = re.search(currency_pattern, text)
 
-                if iban_match:
-                    detected_iban = iban_match.group(1)
+                if header_iban_match:
+                    detected_iban = header_iban_match.group(1)
                     if detected_iban in account_currency_map:
-                        default_iban = detected_iban
-                        print(f"DEBUG: Matched IBAN in Summary: {default_iban}")
-                    else:
-                        print(f"WARNING: IBAN {detected_iban} not found in Summary!")
+                        current_iban = detected_iban
+                        print(f"DEBUG: Matched IBAN in Summary: {current_iban}")
 
-                if currency_match:
-                    extracted_currency = currency_match.group(1)
-                    if default_iban and extracted_currency == account_currency_map.get(default_iban, None):
-                        default_currency = extracted_currency
-                        print(f"DEBUG: Matched Currency for IBAN {default_iban}: {default_currency}")
-                    else:
-                        print(f"WARNING: Currency Mismatch for IBAN {default_iban} -> Extracted: {extracted_currency}")
+                if header_currency_match:
+                    extracted_currency = header_currency_match.group(1)
+                    if current_iban and extracted_currency == account_currency_map.get(current_iban, None):
+                        current_currency = extracted_currency
+                        print(f"DEBUG: Matched Currency for IBAN {current_iban}: {current_currency}")
 
             # **Step 3: Extract Transactions**
             for line in text.strip().split("\n"):
-                iban_match = re.search(iban_pattern, line)  # Check if IBAN exists
-                if iban_match:
-                    current_iban = iban_match.group(1)
-                else:
-                    current_iban = default_iban  # Use default IBAN if not found
-
-                # Extract transaction details
                 date_match = re.match(date_pattern, line)
                 if date_match:
                     date = date_match.group(1)
                     remainder = line[len(date):].strip()
-                    ref_number_match = re.search(r'(P\d{9})', remainder)
+
+                    # Remove reference number if present at the beginning
+                    ref_number_match = re.match(r'(P\d{9})\s+', remainder)
                     ref_number = ref_number_match.group(1) if ref_number_match else ""
+                    if ref_number:
+                        remainder = remainder[len(ref_number):].strip()
+
+                    # Extract Amount & Running Balance
                     numbers = re.findall(amount_pattern, remainder)
                     if not numbers:
                         continue
 
                     amount = numbers[-2] if len(numbers) >= 2 else ""
                     running_balance = numbers[-1] if len(numbers) >= 1 else ""
-                    description = remainder
+                    description = remainder.replace(amount, "").replace(running_balance, "").strip()
 
-                    # **Assign Correct Currency Based on IBAN**
-                    currency = account_currency_map.get(current_iban, default_currency)
+                    # **Assign Correct IBAN & Currency**
+                    assigned_iban = current_iban
+                    assigned_currency = account_currency_map.get(assigned_iban, current_currency)
 
-                    if currency is None:
-                        currency = "Unknown"  # Safety fallback in case currency is still missing
-                        print(f"WARNING: Currency missing for IBAN {current_iban}, assigning 'Unknown'.")
+                    if assigned_currency is None:
+                        assigned_currency = "Unknown"  # Safety fallback
 
                     transactions.append([
                         date.strip(),
@@ -96,8 +90,8 @@ def extract_wio_transactions(pdf_file):
                         description.strip(),
                         amount.replace(",", "").strip(),
                         running_balance.replace(",", "").strip(),
-                        currency,
-                        current_iban  # Store IBAN for tracking
+                        assigned_currency,
+                        assigned_iban  # Store IBAN for tracking
                     ])
 
     return transactions
