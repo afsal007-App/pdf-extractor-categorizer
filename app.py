@@ -7,7 +7,7 @@ import io
 import zipfile
 
 # ✅ Streamlit Page Configuration
-st.set_page_config(page_title="PDF to Excel Categorization Tool", layout="wide")
+st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
 
 # ---------------------------
 # Helper Functions
@@ -20,7 +20,7 @@ def extract_wio_transactions(pdf_file):
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
     iban_pattern = r'(AE\d{22})'  # Matches IBAN (23 characters starting with AE)
     currency_pattern = r'CURRENCY[:\s-]*([A-Z]{3})'  # Improved regex for currency extraction
-    balance_pattern = r'(AE\d{22})\s+([\d,]+\.\d{2})\s*([A-Z]{3})'  # Extracts IBAN, Balance, Currency
+    balance_pattern = r'(AE\d{22})\s+[\d,]+\.\d{2}\s*([A-Z]{3})'  # Extracts IBAN, Balance, Currency
 
     account_currency_map = {}  # Stores { IBAN: Currency }
     default_iban, default_currency = None, None  # Default IBAN & Currency
@@ -35,7 +35,7 @@ def extract_wio_transactions(pdf_file):
             if page_num == 0:
                 matches = re.findall(balance_pattern, text)
                 for match in matches:
-                    account_currency_map[match[0]] = match[2]  # Store { IBAN: Currency }
+                    account_currency_map[match[0]] = match[1]  # Store { IBAN: Currency }
 
                 print("DEBUG: Extracted IBAN & Currency Mapping:", account_currency_map)
 
@@ -45,13 +45,20 @@ def extract_wio_transactions(pdf_file):
                 currency_match = re.search(currency_pattern, text)
 
                 if iban_match:
-                    default_iban = iban_match.group(1)
+                    detected_iban = iban_match.group(1)
+                    if detected_iban in account_currency_map:
+                        default_iban = detected_iban
+                        print(f"DEBUG: Matched IBAN in Summary: {default_iban}")
+                    else:
+                        print(f"WARNING: IBAN {detected_iban} not found in Summary!")
+
                 if currency_match:
                     extracted_currency = currency_match.group(1)
-                    print("DEBUG: Extracted Currency from Header ->", extracted_currency)  
-                    default_currency = extracted_currency
-
-                print("DEBUG: Default IBAN:", default_iban, "Default Currency:", default_currency)
+                    if default_iban and extracted_currency == account_currency_map.get(default_iban, None):
+                        default_currency = extracted_currency
+                        print(f"DEBUG: Matched Currency for IBAN {default_iban}: {default_currency}")
+                    else:
+                        print(f"WARNING: Currency Mismatch for IBAN {default_iban} -> Extracted: {extracted_currency}")
 
             # **Step 3: Extract Transactions**
             for line in text.strip().split("\n"):
