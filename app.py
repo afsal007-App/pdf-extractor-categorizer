@@ -13,26 +13,29 @@ st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
 # Helper Functions
 # ---------------------------
 
-def local_css(file_name):
-    """Load local CSS for styling."""
-    with open(file_name) as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-
 def clean_text(text):
     """Clean and standardize text for matching."""
     return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
 
 def extract_wio_transactions(pdf_file):
-    """Extract transactions from Wio Bank statements."""
+    """Extract transactions from Wio Bank statements while tracking currency."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
+    currency_pattern = r'(?<=CURRENCY\s)([A-Z]{3})'
+
+    current_currency = None  # To track the currency
 
     with pdfplumber.open(pdf_file) as pdf:
         for page in pdf.pages:
             text = page.extract_text()
             if not text:
                 continue
+
+            # Detect currency on first page or if mentioned again
+            currency_match = re.search(currency_pattern, text)
+            if currency_match:
+                current_currency = currency_match.group(1)
 
             for line in text.strip().split('\n'):
                 date_match = re.match(date_pattern, line)
@@ -57,8 +60,10 @@ def extract_wio_transactions(pdf_file):
                         ref_number.strip(),
                         description.strip(),
                         amount.replace(',', '').strip(),
-                        running_balance.replace(',', '').strip()
+                        running_balance.replace(',', '').strip(),
+                        current_currency  # Assigning the tracked currency
                     ])
+
     return transactions
 
 def find_description_column(columns):
@@ -107,13 +112,6 @@ def save_multiple_files_to_zip(file_buffers):
     return zip_buffer
 
 # ---------------------------
-# UI Setup
-# ---------------------------
-
-# Load CSS for styling
-local_css("assets/styles.css")
-
-# ---------------------------
 # Streamlit Interface
 # ---------------------------
 
@@ -129,13 +127,12 @@ tabs = st.tabs(["PDF to Excel Converter", "Categorization"])
 # ---------------------------
 with tabs[0]:
     st.header("PDF to Excel Converter")
-    st.write("Upload your PDF statements to convert them into Excel format with calculated balances.")
+    st.write("Upload your PDF statements to convert them into Excel format with currency tracking.")
 
     uploaded_pdfs = st.file_uploader(
         "Upload PDF files",
         type=["pdf"],
-        accept_multiple_files=True,
-        key="pdf_file_uploader"
+        accept_multiple_files=True
     )
 
     if uploaded_pdfs:
@@ -148,43 +145,27 @@ with tabs[0]:
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
+            columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Currency", "Source File"]
             df = pd.DataFrame(all_transactions, columns=columns)
 
-            # Data cleaning and processing
+            # Data cleaning
             df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
             df['Amount (Incl. VAT)'] = pd.to_numeric(df['Amount (Incl. VAT)'], errors='coerce')
             df['Running Balance (Extracted)'] = pd.to_numeric(df['Running Balance (Extracted)'], errors='coerce')
             df = df.dropna(subset=["Date", "Amount (Incl. VAT)"]).reset_index(drop=True)
 
-            # Calculate balance
-            opening_balance = st.number_input(
-                "Enter Opening Balance:",
-                value=0.0,
-                step=0.01,
-                key="opening_balance_input"
-            )
-            df['Calculated Balance'] = opening_balance + df['Amount (Incl. VAT)'].cumsum()
+            # ✅ Shows the new currency column
+            st.success("Transactions extracted successfully with Currency Tracking!")
+            st.dataframe(df, use_container_width=True)
 
-            st.success("Transactions extracted successfully!")
-            st.dataframe(df, use_container_width=True, key="extracted_transactions_df")
-
-            # ✅ "Prepare for Categorization" button with unique key
-            if st.button("Prepare for Categorization", key="prepare_categorization_btn"):
-                st.session_state['converted_file'] = df
-                st.success("File ready for categorization! Navigate to the 'Categorization' tab.")
-
-            # ✅ Download button with unique key
-            output = save_to_excel(df, filename="converted_transactions.xlsx")
+            # ✅ Download with the new column
+            output = save_to_excel(df, filename="converted_transactions_with_currency.xlsx")
             st.download_button(
                 label="Download Converted Excel",
                 data=output,
-                file_name="converted_transactions.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="converted_excel_download"
+                file_name="converted_transactions_with_currency.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-        else:
-            st.warning("No transactions found.")
     else:
         st.info("Upload PDF files to begin conversion.")
 
@@ -193,7 +174,7 @@ with tabs[0]:
 # ---------------------------
 with tabs[1]:
     st.header("Categorization")
-    st.write("Categorize your transactions based on predefined keywords from the master file.")
+    st.write("Categorize your transactions based on predefined keywords.")
 
     master_df = load_master_file()
 
@@ -203,55 +184,23 @@ with tabs[1]:
         uploaded_excels = st.file_uploader(
             "Upload Excel/CSV files",
             type=["xlsx", "csv"],
-            accept_multiple_files=True,
-            key="excel_file_uploader"
+            accept_multiple_files=True
         )
-        files_to_categorize = list(uploaded_excels) if uploaded_excels else []
 
-        # ✅ Include converted file from session state
-        if st.session_state.get('converted_file') is not None:
-            if st.checkbox("Include converted file from PDF to Excel Converter", key="include_converted_checkbox"):
-                files_to_categorize.append(("Converted_File.xlsx", st.session_state['converted_file']))
-
-        categorized_files = []
-
-        if files_to_categorize:
-            for idx, file_info in enumerate(files_to_categorize):
-                if isinstance(file_info, tuple):  # From session state
-                    filename, df = file_info
-                else:
-                    filename = file_info.name
-                    df = pd.read_excel(file_info) if filename.endswith('xlsx') else pd.read_csv(file_info)
+        if uploaded_excels:
+            for file in uploaded_excels:
+                df = pd.read_excel(file) if file.name.endswith('xlsx') else pd.read_csv(file)
 
                 desc_col = find_description_column(df.columns)
                 if desc_col:
                     categorized_df = categorize_statement(df, master_df, desc_col)
-                    st.subheader(f"Categorized Transactions Preview - {filename}")
-                    st.dataframe(categorized_df.head(), use_container_width=True, key=f"categorized_df_{idx}")
+                    st.subheader(f"Categorized Transactions - {file.name}")
+                    st.dataframe(categorized_df, use_container_width=True)
 
-                    buffer = save_to_excel(categorized_df, filename=f"Categorized_{filename}")
-                    categorized_files.append((f"Categorized_{filename}", buffer))
-
-                    # ✅ Individual download button
+                    buffer = save_to_excel(categorized_df, filename=f"Categorized_{file.name}")
                     st.download_button(
-                        label=f"Download {filename}",
+                        label=f"Download {file.name}",
                         data=buffer,
-                        file_name=f"Categorized_{filename}",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key=f"download_categorized_{idx}"
+                        file_name=f"Categorized_{file.name}",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
-                else:
-                    st.error(f"No description column found in {filename}.")
-
-            # ✅ ZIP Download Button for multiple categorized files
-            if len(categorized_files) > 1:
-                zip_buffer = save_multiple_files_to_zip(categorized_files)
-                st.download_button(
-                    label="Download All Categorized Files (ZIP)",
-                    data=zip_buffer,
-                    file_name="Categorized_Files.zip",
-                    mime="application/zip",
-                    key="download_all_categorized_zip"
-                )
-        else:
-            st.info("Upload files or select the converted file to begin categorization.")
