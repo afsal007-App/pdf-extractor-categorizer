@@ -18,26 +18,38 @@ def clean_text(text):
     return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
 
 def extract_wio_transactions(pdf_file):
-    """Extract transactions from Wio Bank statements while tracking currency."""
+    """Extract transactions from Wio Bank statements using account number for currency mapping."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
-    currency_pattern = r'(?<=CURRENCY\s)([A-Z]{3})'
+    account_pattern = r'(AE\d{22})'
+    balance_pattern = r'(\d{1,3}(?:,\d{3})*\.\d{2})\s([A-Z]{3})'
 
-    current_currency = None  # To track the currency
+    account_currency_map = {}  # Mapping IBAN to currency
+    current_account = None
 
     with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
+        for page_num, page in enumerate(pdf.pages):
             text = page.extract_text()
             if not text:
                 continue
 
-            # Detect currency on first page or if mentioned again
-            currency_match = re.search(currency_pattern, text)
-            if currency_match:
-                current_currency = currency_match.group(1)
+            # Extract account number and currency from the first page summary
+            if page_num == 0:
+                account_matches = re.findall(account_pattern, text)
+                balance_matches = re.findall(balance_pattern, text)
+
+                # Create a dictionary mapping account IBAN to currency
+                for acc, bal in zip(account_matches, balance_matches):
+                    account_currency_map[acc] = bal[1]
 
             for line in text.strip().split('\n'):
+                # Detect account number in transaction details
+                account_match = re.search(account_pattern, line)
+                if account_match:
+                    current_account = account_match.group(1)
+
+                # Extract transaction details
                 date_match = re.match(date_pattern, line)
                 if date_match:
                     date = date_match.group(1)
@@ -55,13 +67,16 @@ def extract_wio_transactions(pdf_file):
                     for item in [ref_number, amount, running_balance]:
                         description = description.replace(item, '').strip()
 
+                    # Assign currency based on the detected account number
+                    currency = account_currency_map.get(current_account, "Unknown")
+
                     transactions.append([
                         date.strip(),
                         ref_number.strip(),
                         description.strip(),
                         amount.replace(',', '').strip(),
                         running_balance.replace(',', '').strip(),
-                        current_currency  # Assigning the tracked currency
+                        currency  # Assigned based on IBAN mapping
                     ])
 
     return transactions
@@ -101,15 +116,6 @@ def save_to_excel(df, filename="output.xlsx"):
     df.to_excel(buffer, index=False)
     buffer.seek(0)
     return buffer
-
-def save_multiple_files_to_zip(file_buffers):
-    """Create a ZIP archive from multiple files."""
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w") as zipf:
-        for filename, file_buffer in file_buffers:
-            zipf.writestr(filename, file_buffer.getvalue())
-    zip_buffer.seek(0)
-    return zip_buffer
 
 # ---------------------------
 # Streamlit Interface
@@ -154,11 +160,10 @@ with tabs[0]:
             df['Running Balance (Extracted)'] = pd.to_numeric(df['Running Balance (Extracted)'], errors='coerce')
             df = df.dropna(subset=["Date", "Amount (Incl. VAT)"]).reset_index(drop=True)
 
-            # ✅ Shows the new currency column
-            st.success("Transactions extracted successfully with Currency Tracking!")
+            st.success("Transactions extracted successfully with Currency Mapping!")
             st.dataframe(df, use_container_width=True)
 
-            # ✅ Download with the new column
+            # ✅ Download with the new currency column
             output = save_to_excel(df, filename="converted_transactions_with_currency.xlsx")
             st.download_button(
                 label="Download Converted Excel",
