@@ -14,7 +14,7 @@ st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
 # ---------------------------
 
 def extract_wio_transactions(pdf_file):
-    """Extract transactions from Wio Bank statements using IBAN-based currency mapping."""
+    """Extract transactions from Wio Bank statements using IBAN-based currency mapping from the first page."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
@@ -37,6 +37,9 @@ def extract_wio_transactions(pdf_file):
                 for match in matches:
                     account_currency_map[match[0]] = match[2]  # Store { IBAN: Currency }
 
+                # **Debugging - Show Extracted IBAN & Currency**
+                print("Extracted IBAN & Currency Mapping:", account_currency_map)
+
             # **Step 2: Extract Default IBAN & Currency from the Transaction Header**
             if "ACCOUNT NUMBER" in text and "IBAN" in text:
                 iban_match = re.search(iban_pattern, text)
@@ -46,6 +49,9 @@ def extract_wio_transactions(pdf_file):
                     default_iban = iban_match.group(1)
                 if currency_match:
                     default_currency = currency_match.group(1)
+
+                # **Debugging - Show Default IBAN & Currency**
+                print("Default IBAN:", default_iban, "Default Currency:", default_currency)
 
             # **Step 3: Extract Transactions**
             for line in text.strip().split("\n"):
