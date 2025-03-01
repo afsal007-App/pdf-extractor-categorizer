@@ -18,12 +18,12 @@ def clean_text(text):
     return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
 
 def extract_wio_transactions(pdf_file):
-    """Extract transactions from Wio Bank statements using account number for currency mapping."""
+    """Extract transactions from Wio Bank statements using IBAN-based currency mapping."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
     account_pattern = r'(AE\d{22})'
-    balance_pattern = r'(\d{1,3}(?:,\d{3})*\.\d{2})\s([A-Z]{3})'
+    balance_pattern = r'(\d{1,3}(?:,\d{3})*\.\d{2})\s?([A-Z]{3})'
 
     account_currency_map = {}  # Mapping IBAN to currency
     current_account = None
@@ -34,6 +34,10 @@ def extract_wio_transactions(pdf_file):
             if not text:
                 continue
 
+            # Debugging: Print first page text
+            if page_num == 0:
+                print("DEBUG: First Page Text:\n", text)
+
             # Extract account number and currency from the first page summary
             if page_num == 0:
                 account_matches = re.findall(account_pattern, text)
@@ -42,6 +46,9 @@ def extract_wio_transactions(pdf_file):
                 # Create a dictionary mapping account IBAN to currency
                 for acc, bal in zip(account_matches, balance_matches):
                     account_currency_map[acc] = bal[1]
+
+                # Debugging: Print extracted IBANs and currencies
+                print("DEBUG: Extracted IBAN & Currency Mapping:", account_currency_map)
 
             for line in text.strip().split('\n'):
                 # Detect account number in transaction details
