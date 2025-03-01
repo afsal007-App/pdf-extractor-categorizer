@@ -7,7 +7,7 @@ import io
 import zipfile
 
 # ✅ Streamlit Page Configuration
-st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
+st.set_page_config(page_title="PDF to Excel Categorization Tool", layout="wide")
 
 # ---------------------------
 # Helper Functions
@@ -19,8 +19,8 @@ def extract_wio_transactions(pdf_file):
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
     iban_pattern = r'(AE\d{22})'  # Matches IBAN (23 characters starting with AE)
-    currency_pattern = r'CURRENCY\s*([A-Z]{3})'
-    balance_pattern = r'(AE\d{22})\s+([\d,]+\.\d{2})\s*([A-Z]{3})'  # IBAN, Balance, Currency
+    currency_pattern = r'CURRENCY[:\s-]*([A-Z]{3})'  # Improved regex for currency extraction
+    balance_pattern = r'(AE\d{22})\s+([\d,]+\.\d{2})\s*([A-Z]{3})'  # Extracts IBAN, Balance, Currency
 
     account_currency_map = {}  # Stores { IBAN: Currency }
     default_iban, default_currency = None, None  # Default IBAN & Currency
@@ -37,8 +37,7 @@ def extract_wio_transactions(pdf_file):
                 for match in matches:
                     account_currency_map[match[0]] = match[2]  # Store { IBAN: Currency }
 
-                # **Debugging - Show Extracted IBAN & Currency**
-                print("Extracted IBAN & Currency Mapping:", account_currency_map)
+                print("DEBUG: Extracted IBAN & Currency Mapping:", account_currency_map)
 
             # **Step 2: Extract Default IBAN & Currency from the Transaction Header**
             if "ACCOUNT NUMBER" in text and "IBAN" in text:
@@ -48,10 +47,11 @@ def extract_wio_transactions(pdf_file):
                 if iban_match:
                     default_iban = iban_match.group(1)
                 if currency_match:
-                    default_currency = currency_match.group(1)
+                    extracted_currency = currency_match.group(1)
+                    print("DEBUG: Extracted Currency from Header ->", extracted_currency)  
+                    default_currency = extracted_currency
 
-                # **Debugging - Show Default IBAN & Currency**
-                print("Default IBAN:", default_iban, "Default Currency:", default_currency)
+                print("DEBUG: Default IBAN:", default_iban, "Default Currency:", default_currency)
 
             # **Step 3: Extract Transactions**
             for line in text.strip().split("\n"):
@@ -78,6 +78,10 @@ def extract_wio_transactions(pdf_file):
 
                     # **Assign Correct Currency Based on IBAN**
                     currency = account_currency_map.get(current_iban, default_currency)
+
+                    if currency is None:
+                        currency = "Unknown"  # Safety fallback in case currency is still missing
+                        print(f"WARNING: Currency missing for IBAN {current_iban}, assigning 'Unknown'.")
 
                     transactions.append([
                         date.strip(),
@@ -154,4 +158,3 @@ with tabs[0]:
             )
     else:
         st.info("Upload PDF files to begin conversion.")
-
