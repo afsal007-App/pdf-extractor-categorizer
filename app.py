@@ -7,7 +7,7 @@ import io
 import zipfile
 
 # ✅ Streamlit Page Configuration
-st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
+st.set_page_config(page_title="PDF to Excel Categorization Tool", layout="wide")
 
 # ---------------------------
 # Helper Functions
@@ -18,7 +18,7 @@ def clean_text(text):
     return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
 
 def extract_wio_transactions(pdf_file):
-    """Extract transactions from Wio Bank statements using IBAN-based currency mapping."""
+    """Extract transactions from Wio Bank statements using IBAN-based currency mapping from the first page."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
@@ -36,7 +36,7 @@ def extract_wio_transactions(pdf_file):
             if not text:
                 continue
 
-            # Extract IBAN & Currency from the Summary Section (First Page)
+            # Extract IBAN & Currency from the First Page Only
             if page_num == 0:
                 iban_matches = re.findall(iban_pattern, text)
                 balance_matches = re.findall(balance_pattern, text)
