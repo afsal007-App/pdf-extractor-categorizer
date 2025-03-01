@@ -36,7 +36,7 @@ def extract_wio_transactions(pdf_file):
             if not text:
                 continue
 
-            # Extract currency and IBAN from the initial page
+            # Extract IBAN & Currency from the Summary Section (First Page)
             if page_num == 0:
                 iban_matches = re.findall(iban_pattern, text)
                 balance_matches = re.findall(balance_pattern, text)
@@ -44,18 +44,19 @@ def extract_wio_transactions(pdf_file):
                 for acc, bal in zip(iban_matches, balance_matches):
                     account_currency_map[acc] = bal[1]
 
-                # Extract currency from the header section
+                # Extract default currency from the top-right corner of the statement
                 currency_match = re.search(currency_pattern, text)
                 if currency_match:
                     current_currency = currency_match.group(1)
 
+            # Detect IBAN in Transaction Pages & Assign Currency
             for line in text.strip().split('\n'):
-                # Detect IBAN in transaction details
+                # Detect IBAN in Transaction Details
                 iban_match = re.search(iban_pattern, line)
                 if iban_match:
                     current_account = iban_match.group(1)
 
-                # Extract transaction details
+                # Extract Transaction Details
                 date_match = re.match(date_pattern, line)
                 if date_match:
                     date = date_match.group(1)
@@ -73,7 +74,7 @@ def extract_wio_transactions(pdf_file):
                     for item in [ref_number, amount, running_balance]:
                         description = description.replace(item, '').strip()
 
-                    # Assign currency based on detected IBAN or fallback to statement currency
+                    # Assign Currency Based on IBAN Mapping (or Default Currency)
                     currency = account_currency_map.get(current_account, current_currency)
 
                     transactions.append([
@@ -105,17 +106,6 @@ def categorize_statement(statement_df, master_df, desc_col):
     """Categorize transactions in the provided DataFrame."""
     statement_df['Categorization'] = statement_df[desc_col].apply(lambda x: categorize_description(x, master_df))
     return statement_df
-
-def load_master_file():
-    """Load the master categorization file."""
-    try:
-        url = "https://docs.google.com/spreadsheets/d/1I_Fz3slHP1mnfsKKgAFl54tKvqlo65Ug/export?format=xlsx"
-        df = pd.read_excel(url)
-        df['Key Word'] = df['Key Word'].astype(str).apply(clean_text)
-        return df
-    except Exception as e:
-        st.error(f"Error loading master file: {e}")
-        return pd.DataFrame()
 
 def save_to_excel(df, filename="output.xlsx"):
     """Save DataFrame to Excel and return as BytesIO."""
@@ -181,38 +171,3 @@ with tabs[0]:
     else:
         st.info("Upload PDF files to begin conversion.")
 
-# ---------------------------
-# Categorization Tab
-# ---------------------------
-with tabs[1]:
-    st.header("Categorization")
-    st.write("Categorize your transactions based on predefined keywords.")
-
-    master_df = load_master_file()
-
-    if master_df.empty:
-        st.error("Master categorization file could not be loaded.")
-    else:
-        uploaded_excels = st.file_uploader(
-            "Upload Excel/CSV files",
-            type=["xlsx", "csv"],
-            accept_multiple_files=True
-        )
-
-        if uploaded_excels:
-            for file in uploaded_excels:
-                df = pd.read_excel(file) if file.name.endswith('xlsx') else pd.read_csv(file)
-
-                desc_col = find_description_column(df.columns)
-                if desc_col:
-                    categorized_df = categorize_statement(df, master_df, desc_col)
-                    st.subheader(f"Categorized Transactions - {file.name}")
-                    st.dataframe(categorized_df, use_container_width=True)
-
-                    buffer = save_to_excel(categorized_df, filename=f"Categorized_{file.name}")
-                    st.download_button(
-                        label=f"Download {file.name}",
-                        data=buffer,
-                        file_name=f"Categorized_{file.name}",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
