@@ -74,7 +74,6 @@ def extract_fab_transactions(pdf_file):
             float(balance.replace(',', '')) if balance else 0.00,
             float(balance.replace(',', '')) if balance else 0.00,  # Extracted Balance Column
             0.00,  # Amount placeholder (will be updated later)
-            0.00,  # Calculated Balance placeholder (will be updated later)
             ""
         ])
     return transactions
@@ -104,14 +103,11 @@ with tabs[0]:
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Amount", "Calculated Balance", "Source File"]
+            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Amount", "Source File"]
             df = pd.DataFrame(all_transactions, columns=columns)
             
             # Copy the extracted balance into Amount column
             df["Amount"] = df["Extracted Balance (AED)"]
-            
-            # Calculate balance using opening balance and amount column
-            df["Calculated Balance"] = opening_balance + df["Amount"].astype(float).cumsum()
             
             st.success("Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
@@ -127,4 +123,4 @@ with tabs[0]:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         else:
-            st.warning("No transactions found.")
+            st.warning("No transactions found.")S
