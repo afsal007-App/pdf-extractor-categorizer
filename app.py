@@ -61,7 +61,7 @@ def extract_fab_transactions(pdf_file):
     return transactions
 
 def extract_wio_transactions(pdf_file):
-    """Improved extraction for Wio Bank statements."""
+    """Improved extraction for Wio Bank statements with correct column mapping."""
     transactions = []
     date_pattern = r'\d{2}/\d{2}/\d{4}'
     amount_pattern = r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?'
@@ -81,10 +81,11 @@ def extract_wio_transactions(pdf_file):
                     description = remainder
                     transactions.append([
                         date.strip(),
-                        "",  # Placeholder for Reference Number
+                        date.strip(),  # Using Date as Value Date
                         description.strip(),
-                        float(numbers[-2].replace(',', '')) if len(numbers) >= 2 else 0.00,  # Amount
-                        float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.00,  # Running Balance
+                        float(numbers[-2].replace(',', '')) if len(numbers) >= 2 else 0.00,  # Debit
+                        float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.00,  # Credit
+                        float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.00,  # Balance
                         "",  # Placeholder for Source File
                         0.00,  # Placeholder for Amount Column
                         0.00  # Placeholder for Calculated Running Balance
