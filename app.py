@@ -22,42 +22,36 @@ def extract_fab_transactions(pdf_file):
     transactions = []
     combined_text = ""
     
-    # Convert BytesIO to a temporary file for PyMuPDF
-    temp_pdf_path = "temp_fab_statement.pdf"
-    with open(temp_pdf_path, "wb") as temp_pdf:
-        temp_pdf.write(pdf_file.read())
-    
-    # Extract text using PyMuPDF (fitz)
-    doc = fitz.open(temp_pdf_path)
-    combined_text += "\n".join([page.get_text("text") for page in doc])
-    doc.close()
-    
-    # Extract text using pdfplumber
-    pdf_file.seek(0)
     with pdfplumber.open(pdf_file) as pdf:
-        combined_text += "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+        for page in pdf.pages:
+            text = page.extract_text()
+            if text:
+                combined_text += text + "\n"
     
-    # Extract full descriptions using regex with multi-line support
+    st.write("📄 Extracted Text from FAB PDF:")
+    st.code(combined_text[:500])  # Show first 500 characters for debugging
+
     full_desc_pattern = re.compile(
         r"(\d{2} \w{3} \d{4})\s+(\d{2} \w{3} \d{4})\s+(.+?)\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})",
         re.MULTILINE,
     )
 
     matches = list(full_desc_pattern.finditer(combined_text))
+    st.write(f"🔍 Found {len(matches)} matching transactions in FAB PDF.")
 
     for match in matches:
         date, value_date, description, debit, credit, balance = match.groups()
         transactions.append([
-            date.strip() if date else "",  # Date
-            value_date.strip() if value_date else "",  # Value Date
-            description.strip() if description else "",  # Full Description
-            float(debit.replace(',', '')) if debit else 0.00,  # Debit
-            float(credit.replace(',', '')) if credit else 0.00,  # Credit
-            float(balance.replace(',', '')) if balance else 0.00,  # Balance
-            "",  # Placeholder for Source File
-            float(balance.replace(',', '')) if balance else 0.00,  # Extracted Balance
-            0.00,  # Placeholder for Amount Column
-            0.00  # Placeholder for FAB Running Balance
+            date.strip() if date else "",
+            value_date.strip() if value_date else "",
+            description.strip() if description else "",
+            float(debit.replace(',', '')) if debit else 0.00,
+            float(credit.replace(',', '')) if credit else 0.00,
+            float(balance.replace(',', '')) if balance else 0.00,
+            "",
+            float(balance.replace(',', '')) if balance else 0.00,
+            0.00,
+            0.00
         ])
     return transactions
 
@@ -138,6 +132,7 @@ with tabs[0]:
         # Display extracted transactions preview
         st.subheader("Extracted Transactions Preview")
         if bank_selection in bank_dfs and not bank_dfs[bank_selection].empty:
+            st.write(f"✅ Previewing {len(bank_dfs[bank_selection])} transactions for {bank_selection}.")
             st.dataframe(bank_dfs[bank_selection].head(50), use_container_width=True)
         else:
             st.warning(f"No transactions available for preview under {bank_selection}. Upload a PDF and try again.")
