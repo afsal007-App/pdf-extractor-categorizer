@@ -116,6 +116,7 @@ def extract_fab_transactions(pdf_file):
             float(debit.replace(',', '')) if debit else 0.00,
             float(credit.replace(',', '')) if credit else 0.00,
             float(balance.replace(',', '')) if balance else 0.00,
+            float(balance.replace(',', '')) if balance else 0.00  # Extracted Balance Column
         ])
     return transactions
 
@@ -148,7 +149,7 @@ with tabs[0]:
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            columns = ["Date", "Value Date", "Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File"]
+            columns = ["Date", "Value Date", "Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Source File"]
             df = pd.DataFrame(all_transactions, columns=columns)
 
             # Calculate balance using opening balance
