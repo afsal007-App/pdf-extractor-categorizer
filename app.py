@@ -66,14 +66,14 @@ def extract_fab_transactions(pdf_file):
         final_desc = " ".join([line.strip() for line in extended_desc if line.strip()])
         
         transactions.append([
-            date.strip(),
-            value_date.strip(),
-            final_desc.strip(),
-            float(debit.replace(',', '')) if debit else 0.00,
-            float(credit.replace(',', '')) if credit else 0.00,
-            float(balance.replace(',', '')) if balance else 0.00,
+            date.strip() if date else "",  # Date
+            value_date.strip() if value_date else "",  # Value Date
+            final_desc.strip() if final_desc else "",  # Full Description
+            float(debit.replace(',', '')) if debit else 0.00,  # Debit
+            float(credit.replace(',', '')) if credit else 0.00,  # Credit
+            float(balance.replace(',', '')) if balance else 0.00,  # Balance
             float(balance.replace(',', '')) if balance else 0.00,  # Extracted Balance Column
-            ""
+            ""  # Placeholder for Source File
         ])
     return transactions
 
@@ -104,6 +104,9 @@ with tabs[0]:
         if all_transactions:
             columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Amount", "Source File"]
             df = pd.DataFrame(all_transactions, columns=columns)
+            
+            # Ensure 'Extracted Balance (AED)' is numeric before calculation
+            df["Extracted Balance (AED)"] = pd.to_numeric(df["Extracted Balance (AED)"], errors='coerce').fillna(0.00)
             
             # Compute Amount column as the difference between consecutive Extracted Balances
             df["Amount"] = df["Extracted Balance (AED)"].diff().fillna(df["Extracted Balance (AED)"] - opening_balance)
