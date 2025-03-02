@@ -74,7 +74,8 @@ def extract_fab_transactions(pdf_file):
             float(balance.replace(',', '')) if balance else 0.00,  # Balance
             float(balance.replace(',', '')) if balance else 0.00,  # Extracted Balance Column
             "",  # Placeholder for Source File
-            0.00  # Placeholder for Amount Column
+            0.00,  # Placeholder for Amount Column
+            0.00  # Placeholder for Calculated Running Balance
         ])
     return transactions
 
