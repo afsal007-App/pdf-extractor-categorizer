@@ -135,9 +135,9 @@ with tabs[0]:
                     df_wio = pd.DataFrame(transactions, columns=["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"])
                     bank_dfs["Wio Bank"] = pd.concat([bank_dfs["Wio Bank"], df_wio], ignore_index=True)
         
-        # Display extracted transactions
+        # Display extracted transactions preview
         st.subheader("Extracted Transactions Preview")
-        if not bank_dfs[bank_selection].empty:
+        if bank_selection in bank_dfs and not bank_dfs[bank_selection].empty:
             st.dataframe(bank_dfs[bank_selection].head(50), use_container_width=True)
         else:
-            st.warning("No transactions available for preview.")
+            st.warning(f"No transactions available for preview under {bank_selection}. Upload a PDF and try again.")
