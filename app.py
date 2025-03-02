@@ -56,8 +56,9 @@ def extract_wio_transactions(pdf_file):
                         date.strip(),
                         ref_number.strip(),
                         description.strip(),
-                        amount.replace(',', '').strip(),
-                        running_balance.replace(',', '').strip()
+                        float(amount.replace(',', '')) if amount else 0.00,
+                        float(running_balance.replace(',', '')) if running_balance else 0.00,
+                        ""
                     ])
     return transactions
 
@@ -98,21 +99,10 @@ def extract_fab_transactions(pdf_file):
     # Extract transactions with extended descriptions
     for match in matches:
         date, value_date, description, debit, credit, balance = match.groups()
-        
-        # Find where the match occurs in the text
-        start_idx = match.start()
-        end_idx = match.end()
-        
-        # Extend the description to capture additional lines of text following the transaction line
-        extended_desc = combined_text[start_idx:end_idx+200].split("\n")
-        
-        # Filter out unnecessary lines and concatenate meaningful ones
-        final_desc = " ".join([line.strip() for line in extended_desc if line.strip()])
-        
         transactions.append([
             date.strip(),
             value_date.strip(),
-            final_desc.strip(),
+            description.strip(),
             float(debit.replace(',', '')) if debit else 0.00,
             float(credit.replace(',', '')) if credit else 0.00,
             float(balance.replace(',', '')) if balance else 0.00,
