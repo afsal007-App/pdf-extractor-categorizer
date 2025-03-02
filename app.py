@@ -66,18 +66,26 @@ def extract_fab_transactions(pdf_file):
     transactions = []
     combined_text = ""
     
-    # Extract text using pdfplumber
-    with pdfplumber.open(pdf_file) as pdf:
-        combined_text += "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+    # Convert BytesIO to a temporary file for PyMuPDF
+    temp_pdf_path = "temp_fab_statement.pdf"
+    with open(temp_pdf_path, "wb") as temp_pdf:
+        temp_pdf.write(pdf_file.read())
     
     # Extract text using PyMuPDF (fitz)
-    doc = fitz.open(pdf_file)
+    doc = fitz.open(temp_pdf_path)
     combined_text += "\n".join([page.get_text("text") for page in doc])
+    doc.close()
     
     # Extract text using PyPDF2
+    pdf_file.seek(0)
     reader = PyPDF2.PdfReader(pdf_file)
     for page in reader.pages:
         combined_text += page.extract_text() if page.extract_text() else ""
+    
+    # Extract text using pdfplumber
+    pdf_file.seek(0)
+    with pdfplumber.open(pdf_file) as pdf:
+        combined_text += "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
     
     # Extract full descriptions using regex
     full_desc_pattern = re.compile(
