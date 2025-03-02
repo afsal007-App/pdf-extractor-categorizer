@@ -123,4 +123,4 @@ with tabs[0]:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         else:
-            st.warning("No transactions found.")S
+            st.warning("No transactions found.")
