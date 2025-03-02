@@ -134,17 +134,10 @@ with tabs[0]:
                     transactions = extract_wio_transactions(file)
                     df_wio = pd.DataFrame(transactions, columns=["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"])
                     bank_dfs["Wio Bank"] = pd.concat([bank_dfs["Wio Bank"], df_wio], ignore_index=True)
-
-        # Consolidate and Download
-        st.subheader("🔄 Consolidate All Banks")
-        if st.button("Generate Consolidated File"):
-            consolidated_df = pd.concat([bank_dfs["FAB"], bank_dfs["Wio Bank"]], ignore_index=True)
-            if not consolidated_df.empty:
-                st.success("Consolidated Data Generated Successfully!")
-                st.dataframe(consolidated_df, use_container_width=True)
-                output = io.BytesIO()
-                consolidated_df.to_excel(output, index=False)
-                output.seek(0)
-                st.download_button("⬇️ Download Consolidated Excel", data=output, file_name="consolidated_transactions.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            else:
-                st.warning("No transactions available for consolidation.")
+        
+        # Display extracted transactions
+        st.subheader("Extracted Transactions Preview")
+        if not bank_dfs[bank_selection].empty:
+            st.dataframe(bank_dfs[bank_selection].head(50), use_container_width=True)
+        else:
+            st.warning("No transactions available for preview.")
