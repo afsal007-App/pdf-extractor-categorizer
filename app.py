@@ -134,6 +134,7 @@ with tabs[0]:
     uploaded_pdfs = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
     
     if uploaded_pdfs:
+        opening_balance = st.number_input("Enter Opening Balance:", value=0.0, step=0.01)
         all_transactions = []
         with st.spinner("Extracting transactions..."):
             for file in uploaded_pdfs:
@@ -150,6 +151,9 @@ with tabs[0]:
             columns = ["Date", "Value Date", "Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File"]
             df = pd.DataFrame(all_transactions, columns=columns)
 
+            # Calculate balance using opening balance
+            df["Balance (AED)"] = opening_balance + df["Credit (AED)"].astype(float) - df["Debit (AED)"].astype(float)
+            
             st.success("Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
             
