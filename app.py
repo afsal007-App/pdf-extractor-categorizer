@@ -104,7 +104,7 @@ def extract_wio_transactions(pdf_file):
 # ---------------------------
 
 st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
-tabs = st.tabs(["PDF to Excel Converter", "Categorization"])
+tabs = st.tabs(["PDF to Excel Converter", "Categorization", "Consolidation"])
 
 with tabs[0]:
     st.header("PDF to Excel Converter")
@@ -135,16 +135,13 @@ with tabs[0]:
                 st.dataframe(df_fab, use_container_width=True)
             elif bank_selection == "Wio Bank":
                 st.dataframe(df_wio, use_container_width=True)
-            
-            output = io.BytesIO()
-            df_fab.to_excel(output, index=False) if bank_selection == "FAB (First Abu Dhabi Bank)" else df_wio.to_excel(output, index=False)
-            output.seek(0)
-            
-            st.download_button(
-                label="⬇️ Download Converted Excel",
-                data=output,
-                file_name="converted_transactions.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+
+with tabs[2]:
+    st.header("Consolidation")
+    if st.button("Consolidate Data"):
+        consolidated_df = pd.concat([df_fab, df_wio], ignore_index=True) if 'df_fab' in locals() and 'df_wio' in locals() else None
+        if consolidated_df is not None:
+            st.success("Data Consolidated Successfully!")
+            st.dataframe(consolidated_df, use_container_width=True)
         else:
-            st.warning("No transactions found.")
+            st.warning("No data available for consolidation.")
