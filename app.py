@@ -99,21 +99,10 @@ def extract_fab_transactions(pdf_file):
     # Extract transactions with extended descriptions
     for match in matches:
         date, value_date, description, debit, credit, balance = match.groups()
-        
-        # Find where the match occurs in the text
-        start_idx = match.start()
-        end_idx = match.end()
-        
-        # Extend the description to capture additional lines of text following the transaction line
-        extended_desc = combined_text[start_idx:end_idx+300].split("\n")
-        
-        # Filter out unnecessary lines and concatenate meaningful ones
-        final_desc = " ".join([line.strip() for line in extended_desc if line.strip()])
-        
         transactions.append([
             date.strip(),
             value_date.strip(),
-            final_desc.strip(),
+            description.strip(),
             float(debit.replace(',', '')) if debit else 0.00,
             float(credit.replace(',', '')) if credit else 0.00,
             float(balance.replace(',', '')) if balance else 0.00,
@@ -150,11 +139,14 @@ with tabs[0]:
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Source File"]
+            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Amount", "Calculated Balance", "Source File"]
             df = pd.DataFrame(all_transactions, columns=columns)
-
-            # Calculate balance using opening balance
-            df["Balance (AED)"] = opening_balance + df["Credit (AED)"].astype(float) - df["Debit (AED)"].astype(float)
+            
+            # Copy the extracted balance into Amount column
+            df["Amount"] = df["Balance (AED)"]
+            
+            # Calculate balance using opening balance and amount column
+            df["Calculated Balance"] = opening_balance + df["Amount"].astype(float).cumsum()
             
             st.success("Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
