@@ -113,9 +113,9 @@ def extract_fab_transactions(pdf_file):
             date.strip(),
             value_date.strip(),
             final_desc.strip(),
-            debit.replace(',', '') if debit else "0.00",
-            credit.replace(',', '') if credit else "0.00",
-            balance.replace(',', '') if balance else "0.00",
+            float(debit.replace(',', '')) if debit else 0.00,
+            float(credit.replace(',', '')) if credit else 0.00,
+            float(balance.replace(',', '')) if balance else 0.00,
         ])
     return transactions
 
