@@ -149,11 +149,14 @@ with tabs[0]:
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            columns = ["Date", "Value Date", "Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Source File"]
+            columns = ["Date", "Value Date", "Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Running Balance Difference", "Source File"]
             df = pd.DataFrame(all_transactions, columns=columns)
 
             # Calculate balance using opening balance
             df["Balance (AED)"] = opening_balance + df["Credit (AED)"].astype(float) - df["Debit (AED)"].astype(float)
+            
+            # Calculate running balance difference
+            df["Running Balance Difference"] = df["Extracted Balance (AED)"].diff().fillna(df["Extracted Balance (AED)"] - opening_balance)
             
             st.success("Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
