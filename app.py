@@ -63,24 +63,38 @@ def extract_fab_transactions(pdf_file):
     """Extraction function for FAB (First Abu Dhabi Bank) statements."""
     transactions = []
     with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if not text:
-                continue
+        combined_text = "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+        
+        # Extract full descriptions using regex
+        full_desc_pattern = re.compile(
+            r"(\d{2} \w{3} \d{4})\s+(\d{2} \w{3} \d{4})\s+(.+?)\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})",
+            re.MULTILINE,
+        )
+
+        matches = list(full_desc_pattern.finditer(combined_text))
+
+        # Extract transactions with extended descriptions
+        for match in matches:
+            date, value_date, description, debit, credit, balance = match.groups()
             
-            # Pattern to extract transaction details
-            pattern = re.compile(r"(\d{2} \w{3} \d{4})\s+(\d{2} \w{3} \d{4})\s+(.+?)\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})")
+            # Find where the match occurs in the text
+            start_idx = match.start()
+            end_idx = match.end()
             
-            for match in pattern.findall(text):
-                date, value_date, description, debit, credit, balance = match
-                transactions.append([
-                    date.strip(),
-                    value_date.strip(),
-                    description.strip(),
-                    debit.replace(',', '') if debit else "0.00",
-                    credit.replace(',', '') if credit else "0.00",
-                    balance.replace(',', '') if balance else "0.00",
-                ])
+            # Extend the description to capture additional lines of text following the transaction line
+            extended_desc = combined_text[start_idx:end_idx+200].split("\n")
+            
+            # Filter out unnecessary lines and concatenate meaningful ones
+            final_desc = " ".join([line.strip() for line in extended_desc if line.strip()])
+            
+            transactions.append([
+                date.strip(),
+                value_date.strip(),
+                final_desc.strip(),
+                debit.replace(',', '') if debit else "0.00",
+                credit.replace(',', '') if credit else "0.00",
+                balance.replace(',', '') if balance else "0.00",
+            ])
     return transactions
 
 # ---------------------------
