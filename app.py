@@ -120,15 +120,21 @@ with tabs[0]:
             for file in uploaded_pdfs:
                 if bank_selection == "FAB (First Abu Dhabi Bank)":
                     transactions = extract_fab_transactions(file)
+                    expected_columns = 10
                 elif bank_selection == "Wio Bank":
                     transactions = extract_wio_transactions(file)
+                    expected_columns = 6
+                
                 for transaction in transactions:
-                    transaction.append(file.name)  # Append file name as source
-                all_transactions.extend(transactions)
+                    if len(transaction) == expected_columns - 1:
+                        transaction.append(file.name)  # Append file name as source
+                    all_transactions.append(transaction)
 
         if all_transactions:
-            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File", "Extracted Balance", "Amount", "FAB Running Balance"] if bank_selection == "FAB (First Abu Dhabi Bank)" else ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
-            df = pd.DataFrame(all_transactions, columns=columns)
+            columns_fab = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File", "Extracted Balance", "Amount", "FAB Running Balance"]
+            columns_wio = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
+            
+            df = pd.DataFrame(all_transactions, columns=columns_fab if bank_selection == "FAB (First Abu Dhabi Bank)" else columns_wio)
             
             # Save consolidated data to Excel
             output = io.BytesIO()
