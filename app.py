@@ -2,160 +2,181 @@
 import streamlit as st
 import pandas as pd
 import pdfplumber
+import pytesseract
+from pdf2image import convert_from_path
 import re
 import io
-import zipfile
-
-# ✅ Streamlit Page Configuration
-st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
 
 # ---------------------------
-# Helper Functions
+# OCR for Scanned PDFs
+# ---------------------------
+def extract_text_from_scanned_pdf(pdf_file):
+    """Extract text from scanned PDFs using OCR."""
+    images = convert_from_path(pdf_file)
+    extracted_text = []
+    for img in images:
+        text = pytesseract.image_to_string(img)
+        extracted_text.extend(text.split("\n"))
+    return extracted_text
+
+# ---------------------------
+# Extraction Functions for Each Bank
 # ---------------------------
 
+def clean_text(text):
+    """Clean and standardize text for matching."""
+    return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
+
+# 🏦 Wio Bank Extraction
 def extract_wio_transactions(pdf_file):
-    """Extract transactions from Wio Bank statements using IBAN-based currency mapping."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
-    iban_pattern = r'(AE\d{22})'  # Matches IBAN (23 characters starting with AE)
-    currency_pattern = r'CURRENCY[:\s-]*([A-Z]{3})'  # Improved regex for currency extraction
-    balance_pattern = r'(AE\d{22})\s+[\d,]+\.\d{2}\s*([A-Z]{3})'  # Extracts IBAN, Balance, Currency
-
-    account_currency_map = {}  # Stores { IBAN: Currency }
-    current_iban, current_currency = None, None  # Default IBAN & Currency
 
     with pdfplumber.open(pdf_file) as pdf:
-        for page_num, page in enumerate(pdf.pages):
+        for page in pdf.pages:
             text = page.extract_text()
             if not text:
                 continue
 
-            # **Step 1: Extract IBAN & Currency from the First Page (Summary Table)**
-            if page_num == 0:
-                matches = re.findall(balance_pattern, text)
-                for match in matches:
-                    account_currency_map[match[0]] = match[1]  # Store { IBAN: Currency }
-                print("DEBUG: Extracted IBAN & Currency Mapping:", account_currency_map)
-
-            # **Step 2: Detect Transaction Headers & Update IBAN and Currency**
-            if "ACCOUNT NUMBER" in text and "IBAN" in text:
-                header_iban_match = re.search(iban_pattern, text)
-                header_currency_match = re.search(currency_pattern, text)
-
-                if header_iban_match:
-                    detected_iban = header_iban_match.group(1)
-                    if detected_iban in account_currency_map:
-                        current_iban = detected_iban
-                        print(f"DEBUG: Matched IBAN in Summary: {current_iban}")
-
-                if header_currency_match:
-                    extracted_currency = header_currency_match.group(1)
-                    if current_iban and extracted_currency == account_currency_map.get(current_iban, None):
-                        current_currency = extracted_currency
-                        print(f"DEBUG: Matched Currency for IBAN {current_iban}: {current_currency}")
-
-            # **Step 3: Extract Transactions**
-            for line in text.strip().split("\n"):
+            lines = text.strip().split('\n')
+            for line in lines:
                 date_match = re.match(date_pattern, line)
                 if date_match:
                     date = date_match.group(1)
                     remainder = line[len(date):].strip()
-
-                    # Remove reference number if present at the beginning
-                    ref_number_match = re.match(r'(P\d{9})\s+', remainder)
+                    ref_number_match = re.search(r'(P\d{9})', remainder)
                     ref_number = ref_number_match.group(1) if ref_number_match else ""
-                    if ref_number:
-                        remainder = remainder[len(ref_number):].strip()
-
-                    # Extract Amount & Running Balance
                     numbers = re.findall(amount_pattern, remainder)
-                    if not numbers:
+
+                    if len(numbers) < 1:
                         continue
 
                     amount = numbers[-2] if len(numbers) >= 2 else ""
                     running_balance = numbers[-1] if len(numbers) >= 1 else ""
-                    description = remainder.replace(amount, "").replace(running_balance, "").strip()
 
-                    # **Assign Correct IBAN & Currency**
-                    assigned_iban = current_iban
-                    assigned_currency = account_currency_map.get(assigned_iban, current_currency)
+                    description = remainder
+                    for item in [ref_number, amount, running_balance]:
+                        if item:
+                            description = description.replace(item, '').strip()
 
-                    if assigned_currency is None:
-                        assigned_currency = "Unknown"  # Safety fallback
-
-                    transactions.append([
-                        date.strip(),
-                        ref_number.strip(),
-                        description.strip(),
-                        amount.replace(",", "").strip(),
-                        running_balance.replace(",", "").strip(),
-                        assigned_currency,
-                        assigned_iban  # Store IBAN for tracking
-                    ])
-
+                    transactions.append([date.strip(), ref_number.strip(), description.strip(), amount.replace(',', '').strip(), running_balance.replace(',', '').strip()])
     return transactions
 
-def save_to_excel(df, filename="output.xlsx"):
-    """Save DataFrame to Excel and return as BytesIO."""
-    buffer = io.BytesIO()
-    df.to_excel(buffer, index=False)
-    buffer.seek(0)
-    return buffer
+# 🏦 ABC Bank Extraction
+def extract_abc_bank_transactions(pdf_file):
+    transactions = []
+    with pdfplumber.open(pdf_file) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
+            if not text:
+                continue
+
+            lines = text.strip().split('\n')
+            for line in lines:
+                parts = line.split()
+                if len(parts) >= 4:
+                    date = parts[0]
+                    description = " ".join(parts[1:-2])
+                    amount = parts[-2]
+                    balance = parts[-1]
+                    transactions.append([date, description, amount, balance])
+    return transactions
+
+# 🏦 FAB Bank Extraction (Newly Added)
+def extract_fab_transactions(pdf_file):
+    transactions = []
+    date_pattern = r'(\d{2} [A-Z]{3} \d{4})'
+    amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
+
+    with pdfplumber.open(pdf_file) as pdf:
+        lines = []
+        for page in pdf.pages:
+            text = page.extract_text()
+            if text:
+                lines.extend(text.split("\n"))
+
+    current_transaction = []
+    for line in lines:
+        if re.match(date_pattern, line):
+            if current_transaction:
+                transactions.append(current_transaction)
+            current_transaction = [line]
+        elif current_transaction:
+            current_transaction.append(line)
+
+    if current_transaction:
+        transactions.append(current_transaction)
+
+    extracted_data = []
+    for trans in transactions:
+        full_text = " ".join(trans)
+        date_match = re.search(date_pattern, full_text)
+        date = date_match.group(1) if date_match else ""
+
+        values = re.findall(amount_pattern, full_text)
+        balance = values[-1] if values else ""
+        credit = values[-2] if len(values) > 1 else "0.00"
+        debit = values[-3] if len(values) > 2 else "0.00"
+
+        description = full_text
+        for item in [date, debit, credit, balance]:
+            description = description.replace(str(item), "").strip()
+
+        extracted_data.append([date, date, description, debit, credit, balance])
+
+    return extracted_data
 
 # ---------------------------
 # Streamlit Interface
 # ---------------------------
+st.set_page_config(page_title="Multi-Bank PDF Extractor with OCR", layout="wide")
 
-# Initialize session state
-if 'converted_file' not in st.session_state:
-    st.session_state['converted_file'] = None
+st.header("🏦 PDF to Excel Converter - Multi-Bank & OCR Support")
 
-# Tabs for navigation
-tabs = st.tabs(["PDF to Excel Converter"])
+# 📌 Bank Selection Dropdown
+bank_choice = st.selectbox("Select Your Bank:", ["FAB Bank", "Wio Bank", "ABC Bank", "Scanned PDF (OCR)"])
 
-# ---------------------------
-# PDF to Excel Converter Tab
-# ---------------------------
-with tabs[0]:
-    st.header("PDF to Excel Converter")
-    st.write("Upload your PDF statements to convert them into Excel format with IBAN-based currency tracking.")
+# 📤 PDF Upload
+uploaded_pdfs = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
 
-    uploaded_pdfs = st.file_uploader(
-        "Upload PDF files",
-        type=["pdf"],
-        accept_multiple_files=True
-    )
+if uploaded_pdfs:
+    all_transactions = []
+    with st.spinner(f"Processing {bank_choice}..."):
 
-    if uploaded_pdfs:
-        all_transactions = []
-        with st.spinner("Extracting transactions..."):
-            for file in uploaded_pdfs:
+        for file in uploaded_pdfs:
+            if bank_choice == "FAB Bank":
+                transactions = extract_fab_transactions(file)
+            elif bank_choice == "Wio Bank":
                 transactions = extract_wio_transactions(file)
-                for transaction in transactions:
-                    transaction.append(file.name)
-                all_transactions.extend(transactions)
+            elif bank_choice == "ABC Bank":
+                transactions = extract_abc_bank_transactions(file)
+            elif bank_choice == "Scanned PDF (OCR)":
+                extracted_text = extract_text_from_scanned_pdf(file)
+                transactions = [[line] for line in extracted_text]  # OCR just extracts text
 
-        if all_transactions:
-            columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Currency", "IBAN", "Source File"]
-            df = pd.DataFrame(all_transactions, columns=columns)
+            for transaction in transactions:
+                transaction.append(file.name)
+            all_transactions.extend(transactions)
 
-            # Data cleaning
-            df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
-            df['Amount (Incl. VAT)'] = pd.to_numeric(df['Amount (Incl. VAT)'], errors='coerce')
-            df['Running Balance (Extracted)'] = pd.to_numeric(df['Running Balance (Extracted)'], errors='coerce')
-            df = df.dropna(subset=["Date", "Amount (Incl. VAT)"]).reset_index(drop=True)
+    if all_transactions:
+        columns = ["Date", "Value Date", "Description", "Debit", "Credit", "Balance", "Source File"] if bank_choice != "Scanned PDF (OCR)" else ["Extracted Text", "Source File"]
+        df = pd.DataFrame(all_transactions, columns=columns)
 
-            st.success("Transactions extracted successfully with IBAN-based Currency Mapping!")
-            st.dataframe(df, use_container_width=True)
+        st.success("Transactions extracted successfully!")
+        st.dataframe(df, use_container_width=True)
 
-            # ✅ Download with the new currency column
-            output = save_to_excel(df, filename="converted_transactions_with_currency.xlsx")
-            st.download_button(
-                label="Download Converted Excel",
-                data=output,
-                file_name="converted_transactions_with_currency.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        buffer = io.BytesIO()
+        df.to_excel(buffer, index=False)
+        buffer.seek(0)
+
+        st.download_button(
+            label="⬇️ Download Extracted Data",
+            data=buffer,
+            file_name="extracted_transactions.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     else:
-        st.info("Upload PDF files to begin conversion.")
+        st.warning("No transactions found.")
+else:
+    st.info("Upload PDF files to start the extraction process.")
