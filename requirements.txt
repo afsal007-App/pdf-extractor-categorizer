@@ -3,3 +3,4 @@ pdf2image
 pillow
 tesseract
 PyPDF2
+PyMuPDF
