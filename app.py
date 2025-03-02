@@ -104,7 +104,7 @@ def extract_wio_transactions(pdf_file):
 # ---------------------------
 
 st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
-tabs = st.tabs(["PDF to Excel Converter", "Categorization", "Consolidation"])
+tabs = st.tabs(["PDF to Excel Converter", "Categorization"])
 
 with tabs[0]:
     st.header("PDF to Excel Converter")
@@ -115,33 +115,33 @@ with tabs[0]:
     if uploaded_pdfs:
         opening_balance = st.number_input("Enter Opening Balance:", value=0.0, step=0.01)
         all_transactions = []
-
+        
         with st.spinner("Extracting transactions..."):
             for file in uploaded_pdfs:
                 if bank_selection == "FAB (First Abu Dhabi Bank)":
                     transactions = extract_fab_transactions(file)
-                    df_fab = pd.DataFrame(transactions, columns=["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File", "Extracted Balance", "Amount", "FAB Running Balance"])
-                    if not df_fab.empty:
-                        df_fab["Amount"] = df_fab["Extracted Balance"].diff().fillna(df_fab["Extracted Balance"].iloc[0] - opening_balance)
-                        df_fab["FAB Running Balance"] = opening_balance + df_fab["Amount"].cumsum()
                 elif bank_selection == "Wio Bank":
                     transactions = extract_wio_transactions(file)
-                    df_wio = pd.DataFrame(transactions, columns=["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"])
+                for transaction in transactions:
+                    transaction.append(file.name)  # Append file name as source
                 all_transactions.extend(transactions)
 
         if all_transactions:
+            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File", "Extracted Balance", "Amount", "FAB Running Balance"] if bank_selection == "FAB (First Abu Dhabi Bank)" else ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
+            df = pd.DataFrame(all_transactions, columns=columns)
+            
+            # Save consolidated data to Excel
+            output = io.BytesIO()
+            df.to_excel(output, index=False)
+            output.seek(0)
+            
             st.success("Transactions extracted successfully!")
-            if bank_selection == "FAB (First Abu Dhabi Bank)":
-                st.dataframe(df_fab, use_container_width=True)
-            elif bank_selection == "Wio Bank":
-                st.dataframe(df_wio, use_container_width=True)
-
-with tabs[2]:
-    st.header("Consolidation")
-    if st.button("Consolidate Data"):
-        consolidated_df = pd.concat([df_fab, df_wio], ignore_index=True) if 'df_fab' in locals() and 'df_wio' in locals() else None
-        if consolidated_df is not None:
-            st.success("Data Consolidated Successfully!")
-            st.dataframe(consolidated_df, use_container_width=True)
+            st.dataframe(df, use_container_width=True)
+            st.download_button(
+                label="⬇️ Download Consolidated Excel",
+                data=output,
+                file_name="consolidated_transactions.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         else:
-            st.warning("No data available for consolidation.")
+            st.warning("No transactions found.")
