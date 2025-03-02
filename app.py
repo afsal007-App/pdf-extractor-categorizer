@@ -63,32 +63,42 @@ def extract_fab_transactions(pdf_file):
 def extract_wio_transactions(pdf_file):
     """Improved extraction for Wio Bank statements with correct column mapping."""
     transactions = []
-    date_pattern = r'\d{2}/\d{2}/\d{4}'
-    amount_pattern = r'-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?'
+    date_pattern = r'(\d{2}/\d{2}/\d{4})'
+    amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
 
     with pdfplumber.open(pdf_file) as pdf:
         for page in pdf.pages:
             text = page.extract_text()
             if not text:
                 continue
+
             lines = text.strip().split('\n')
             for line in lines:
                 date_match = re.match(date_pattern, line)
                 if date_match:
-                    date = date_match.group(0)
+                    date = date_match.group(1)
                     remainder = line[len(date):].strip()
+                    ref_number_match = re.search(r'(P\d{9})', remainder)
+                    ref_number = ref_number_match.group(1) if ref_number_match else ""
                     numbers = re.findall(amount_pattern, remainder)
+
+                    if len(numbers) < 1:
+                        continue
+
+                    amount = numbers[-2] if len(numbers) >= 2 else ""
+                    running_balance = numbers[-1] if len(numbers) >= 1 else ""
                     description = remainder
+                    for item in [ref_number, amount, running_balance]:
+                        if item:
+                            description = description.replace(item, '').strip()
+
                     transactions.append([
                         date.strip(),
-                        date.strip(),  # Using Date as Value Date
+                        ref_number.strip(),
                         description.strip(),
-                        float(numbers[-2].replace(',', '')) if len(numbers) >= 2 else 0.00,  # Debit
-                        float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.00,  # Credit
-                        float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.00,  # Balance
-                        "",  # Placeholder for Source File
-                        float(numbers[-1].replace(',', '')) if len(numbers) >= 1 else 0.00,  # Extracted Balance
-                        0.00  # Placeholder for Wio Running Balance
+                        float(amount.replace(',', '')) if amount else 0.00,
+                        float(running_balance.replace(',', '')) if running_balance else 0.00,
+                        ""  # Placeholder for Source File
                     ])
     return transactions
 
@@ -108,6 +118,8 @@ with tabs[0]:
     if uploaded_pdfs:
         opening_balance = st.number_input("Enter Opening Balance:", value=0.0, step=0.01)
         all_transactions = []
+        columns = []
+
         with st.spinner("Extracting transactions..."):
             for file in uploaded_pdfs:
                 if bank_selection == "FAB (First Abu Dhabi Bank)":
@@ -115,9 +127,9 @@ with tabs[0]:
                     columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File", "Extracted Balance", "FAB Running Balance"]
                 elif bank_selection == "Wio Bank":
                     transactions = extract_wio_transactions(file)
-                    columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File", "Extracted Balance", "Wio Running Balance"]
+                    columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
                 for transaction in transactions:
-                    transaction[-3] = file.name  # Update source file
+                    transaction[-1] = file.name  # Update source file
                 all_transactions.extend(transactions)
 
         if all_transactions:
@@ -125,8 +137,6 @@ with tabs[0]:
             
             if bank_selection == "FAB (First Abu Dhabi Bank)":
                 df["FAB Running Balance"] = opening_balance + df["Extracted Balance"].diff().fillna(df["Extracted Balance"] - opening_balance)
-            elif bank_selection == "Wio Bank":
-                df["Wio Running Balance"] = opening_balance + df["Extracted Balance"].diff().fillna(df["Extracted Balance"] - opening_balance)
             
             st.success("Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
