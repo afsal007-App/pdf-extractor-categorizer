@@ -62,7 +62,7 @@ def extract_fab_transactions(pdf_file):
     return transactions
 
 def extract_wio_transactions(pdf_file):
-    """Improved extraction for Wio Bank statements with correct column mapping."""
+    """Improved extraction for Wio Bank statements."""
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
@@ -72,7 +72,6 @@ def extract_wio_transactions(pdf_file):
             text = page.extract_text()
             if not text:
                 continue
-
             lines = text.strip().split('\n')
             for line in lines:
                 date_match = re.match(date_pattern, line)
@@ -82,17 +81,14 @@ def extract_wio_transactions(pdf_file):
                     ref_number_match = re.search(r'(P\d{9})', remainder)
                     ref_number = ref_number_match.group(1) if ref_number_match else ""
                     numbers = re.findall(amount_pattern, remainder)
-
                     if len(numbers) < 1:
                         continue
-
                     amount = numbers[-2] if len(numbers) >= 2 else ""
                     running_balance = numbers[-1] if len(numbers) >= 1 else ""
                     description = remainder
                     for item in [ref_number, amount, running_balance]:
                         if item:
                             description = description.replace(item, '').strip()
-
                     transactions.append([
                         date.strip(),
                         ref_number.strip(),
@@ -119,28 +115,29 @@ with tabs[0]:
     if uploaded_pdfs:
         opening_balance = st.number_input("Enter Opening Balance:", value=0.0, step=0.01)
         all_transactions = []
-        columns = []
 
         with st.spinner("Extracting transactions..."):
             for file in uploaded_pdfs:
                 if bank_selection == "FAB (First Abu Dhabi Bank)":
                     transactions = extract_fab_transactions(file)
-                    columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File", "Extracted Balance", "Amount", "FAB Running Balance"]
-                    df = pd.DataFrame(transactions, columns=columns)
-                    df["Amount"] = df["Extracted Balance"].diff().fillna(df["Extracted Balance"].iloc[0] - opening_balance)
-                    df["FAB Running Balance"] = opening_balance + df["Amount"].cumsum()
+                    df_fab = pd.DataFrame(transactions, columns=["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Source File", "Extracted Balance", "Amount", "FAB Running Balance"])
+                    if not df_fab.empty:
+                        df_fab["Amount"] = df_fab["Extracted Balance"].diff().fillna(df_fab["Extracted Balance"].iloc[0] - opening_balance)
+                        df_fab["FAB Running Balance"] = opening_balance + df_fab["Amount"].cumsum()
                 elif bank_selection == "Wio Bank":
                     transactions = extract_wio_transactions(file)
-                    columns = ["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"]
-                    df = pd.DataFrame(transactions, columns=columns)
+                    df_wio = pd.DataFrame(transactions, columns=["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"])
                 all_transactions.extend(transactions)
 
         if all_transactions:
             st.success("Transactions extracted successfully!")
-            st.dataframe(df, use_container_width=True)
+            if bank_selection == "FAB (First Abu Dhabi Bank)":
+                st.dataframe(df_fab, use_container_width=True)
+            elif bank_selection == "Wio Bank":
+                st.dataframe(df_wio, use_container_width=True)
             
             output = io.BytesIO()
-            df.to_excel(output, index=False)
+            df_fab.to_excel(output, index=False) if bank_selection == "FAB (First Abu Dhabi Bank)" else df_wio.to_excel(output, index=False)
             output.seek(0)
             
             st.download_button(
