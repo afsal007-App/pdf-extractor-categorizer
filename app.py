@@ -73,7 +73,8 @@ def extract_fab_transactions(pdf_file):
             float(credit.replace(',', '')) if credit else 0.00,  # Credit
             float(balance.replace(',', '')) if balance else 0.00,  # Balance
             float(balance.replace(',', '')) if balance else 0.00,  # Extracted Balance Column
-            ""  # Placeholder for Source File
+            "",  # Placeholder for Source File
+            0.00  # Placeholder for Amount Column
         ])
     return transactions
 
@@ -98,11 +99,11 @@ with tabs[0]:
             for file in uploaded_pdfs:
                 transactions = extract_fab_transactions(file)
                 for transaction in transactions:
-                    transaction[-1] = file.name  # Update source file
+                    transaction[-2] = file.name  # Update source file
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Amount", "Source File"]
+            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Source File", "Amount"]
             df = pd.DataFrame(all_transactions, columns=columns)
             
             # Ensure 'Extracted Balance (AED)' is numeric before calculation
