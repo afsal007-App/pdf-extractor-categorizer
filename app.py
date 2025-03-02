@@ -43,8 +43,8 @@ def extract_wio_transactions(pdf_file):
                     if len(numbers) < 1:
                         continue
 
-                    amount = numbers[-2] if len(numbers) >= 2 else ""
-                    running_balance = numbers[-1] if len(numbers) >= 1 else ""
+                    amount = numbers[-2] if len(numbers) >= 2 else "0.00"
+                    running_balance = numbers[-1] if len(numbers) >= 1 else "0.00"
 
                     # Extract and clean description
                     description = remainder
@@ -56,8 +56,12 @@ def extract_wio_transactions(pdf_file):
                         date.strip(),
                         ref_number.strip(),
                         description.strip(),
-                        float(amount.replace(',', '')) if amount else 0.00,
-                        float(running_balance.replace(',', '')) if running_balance else 0.00,
+                        float(amount.replace(',', '')),
+                        0.00,  # Credit default
+                        float(running_balance.replace(',', '')),
+                        float(running_balance.replace(',', '')),  # Extracted Balance Column
+                        0.00,  # Amount placeholder (will be updated later)
+                        0.00,  # Calculated Balance placeholder (will be updated later)
                         ""
                     ])
     return transactions
@@ -106,7 +110,10 @@ def extract_fab_transactions(pdf_file):
             float(debit.replace(',', '')) if debit else 0.00,
             float(credit.replace(',', '')) if credit else 0.00,
             float(balance.replace(',', '')) if balance else 0.00,
-            float(balance.replace(',', '')) if balance else 0.00  # Extracted Balance Column
+            float(balance.replace(',', '')) if balance else 0.00,  # Extracted Balance Column
+            0.00,  # Amount placeholder (will be updated later)
+            0.00,  # Calculated Balance placeholder (will be updated later)
+            ""
         ])
     return transactions
 
@@ -135,7 +142,7 @@ with tabs[0]:
                     transactions = extract_fab_transactions(file)
                 
                 for transaction in transactions:
-                    transaction.append(file.name)
+                    transaction[-1] = file.name  # Update source file
                 all_transactions.extend(transactions)
 
         if all_transactions:
@@ -143,7 +150,7 @@ with tabs[0]:
             df = pd.DataFrame(all_transactions, columns=columns)
             
             # Copy the extracted balance into Amount column
-            df["Amount"] = df["Balance (AED)"]
+            df["Amount"] = df["Extracted Balance (AED)"]
             
             # Calculate balance using opening balance and amount column
             df["Calculated Balance"] = opening_balance + df["Amount"].astype(float).cumsum()
