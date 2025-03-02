@@ -6,9 +6,10 @@ import pytesseract
 from pdf2image import convert_from_path
 import re
 import io
+import os
 
 # ---------------------------
-# OCR for Scanned PDFs
+# 🛠️ OCR for Scanned PDFs
 # ---------------------------
 def extract_text_from_scanned_pdf(pdf_file):
     """Extract text from scanned PDFs using OCR."""
@@ -20,9 +21,8 @@ def extract_text_from_scanned_pdf(pdf_file):
     return extracted_text
 
 # ---------------------------
-# Extraction Functions for Each Bank
+# 🏦 Extraction Functions for Each Bank
 # ---------------------------
-
 def clean_text(text):
     """Clean and standardize text for matching."""
     return re.sub(r'\s+', ' ', str(text).lower().replace('–', '-').replace('—', '-')).strip()
@@ -128,7 +128,7 @@ def extract_fab_transactions(pdf_file):
     return extracted_data
 
 # ---------------------------
-# Streamlit Interface
+# 🚀 Streamlit Interface
 # ---------------------------
 st.set_page_config(page_title="Multi-Bank PDF Extractor with OCR", layout="wide")
 
@@ -163,7 +163,7 @@ if uploaded_pdfs:
         columns = ["Date", "Value Date", "Description", "Debit", "Credit", "Balance", "Source File"] if bank_choice != "Scanned PDF (OCR)" else ["Extracted Text", "Source File"]
         df = pd.DataFrame(all_transactions, columns=columns)
 
-        st.success("Transactions extracted successfully!")
+        st.success("✅ Transactions extracted successfully!")
         st.dataframe(df, use_container_width=True)
 
         buffer = io.BytesIO()
@@ -177,6 +177,6 @@ if uploaded_pdfs:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
-        st.warning("No transactions found.")
+        st.warning("⚠️ No transactions found.")
 else:
-    st.info("Upload PDF files to start the extraction process.")
+    st.info("📂 Upload PDF files to start the extraction process.")
