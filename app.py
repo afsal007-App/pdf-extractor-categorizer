@@ -103,7 +103,7 @@ with tabs[0]:
                 all_transactions.extend(transactions)
 
         if all_transactions:
-            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Source File", "Amount"]
+            columns = ["Date", "Value Date", "Full Description", "Debit (AED)", "Credit (AED)", "Balance (AED)", "Extracted Balance (AED)", "Source File", "Amount", "Calculated Running Balance"]
             df = pd.DataFrame(all_transactions, columns=columns)
             
             # Ensure 'Extracted Balance (AED)' is numeric before calculation
@@ -113,6 +113,9 @@ with tabs[0]:
             df["Amount"] = df["Extracted Balance (AED)"].diff()
             df.loc[0, "Amount"] = df.loc[0, "Extracted Balance (AED)"] - opening_balance  # First row adjustment
             df["Amount"] = df["Amount"].fillna(0.00)  # Ensure no NaN values
+            
+            # Compute Calculated Running Balance
+            df["Calculated Running Balance"] = opening_balance + df["Amount"].cumsum()
             
             st.success("Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
