@@ -108,8 +108,10 @@ with tabs[0]:
             # Ensure 'Extracted Balance (AED)' is numeric before calculation
             df["Extracted Balance (AED)"] = pd.to_numeric(df["Extracted Balance (AED)"], errors='coerce').fillna(0.00)
             
-            # Compute Amount column as the difference between consecutive Extracted Balances
-            df["Amount"] = df["Extracted Balance (AED)"].diff().fillna(df["Extracted Balance (AED)"] - opening_balance)
+            # Compute Amount column correctly
+            df["Amount"] = df["Extracted Balance (AED)"].diff()
+            df.loc[0, "Amount"] = df.loc[0, "Extracted Balance (AED)"] - opening_balance  # First row adjustment
+            df["Amount"] = df["Amount"].fillna(0.00)  # Ensure no NaN values
             
             st.success("Transactions extracted successfully!")
             st.dataframe(df, use_container_width=True)
