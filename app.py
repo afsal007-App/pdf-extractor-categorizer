@@ -3,6 +3,8 @@
 import streamlit as st
 import pandas as pd
 import pdfplumber
+import PyPDF2
+import fitz  # PyMuPDF
 import re
 import io
 import zipfile
@@ -60,41 +62,53 @@ def extract_wio_transactions(pdf_file):
     return transactions
 
 def extract_fab_transactions(pdf_file):
-    """Extraction function for FAB (First Abu Dhabi Bank) statements."""
+    """Extraction function for FAB (First Abu Dhabi Bank) statements using PyMuPDF, PyPDF2, and pdfplumber."""
     transactions = []
+    combined_text = ""
+    
+    # Extract text using pdfplumber
     with pdfplumber.open(pdf_file) as pdf:
-        combined_text = "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+        combined_text += "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+    
+    # Extract text using PyMuPDF (fitz)
+    doc = fitz.open(pdf_file)
+    combined_text += "\n".join([page.get_text("text") for page in doc])
+    
+    # Extract text using PyPDF2
+    reader = PyPDF2.PdfReader(pdf_file)
+    for page in reader.pages:
+        combined_text += page.extract_text() if page.extract_text() else ""
+    
+    # Extract full descriptions using regex
+    full_desc_pattern = re.compile(
+        r"(\d{2} \w{3} \d{4})\s+(\d{2} \w{3} \d{4})\s+(.+?)\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})",
+        re.MULTILINE,
+    )
+
+    matches = list(full_desc_pattern.finditer(combined_text))
+
+    # Extract transactions with extended descriptions
+    for match in matches:
+        date, value_date, description, debit, credit, balance = match.groups()
         
-        # Extract full descriptions using regex
-        full_desc_pattern = re.compile(
-            r"(\d{2} \w{3} \d{4})\s+(\d{2} \w{3} \d{4})\s+(.+?)\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})",
-            re.MULTILINE,
-        )
-
-        matches = list(full_desc_pattern.finditer(combined_text))
-
-        # Extract transactions with extended descriptions
-        for match in matches:
-            date, value_date, description, debit, credit, balance = match.groups()
-            
-            # Find where the match occurs in the text
-            start_idx = match.start()
-            end_idx = match.end()
-            
-            # Extend the description to capture additional lines of text following the transaction line
-            extended_desc = combined_text[start_idx:end_idx+200].split("\n")
-            
-            # Filter out unnecessary lines and concatenate meaningful ones
-            final_desc = " ".join([line.strip() for line in extended_desc if line.strip()])
-            
-            transactions.append([
-                date.strip(),
-                value_date.strip(),
-                final_desc.strip(),
-                debit.replace(',', '') if debit else "0.00",
-                credit.replace(',', '') if credit else "0.00",
-                balance.replace(',', '') if balance else "0.00",
-            ])
+        # Find where the match occurs in the text
+        start_idx = match.start()
+        end_idx = match.end()
+        
+        # Extend the description to capture additional lines of text following the transaction line
+        extended_desc = combined_text[start_idx:end_idx+200].split("\n")
+        
+        # Filter out unnecessary lines and concatenate meaningful ones
+        final_desc = " ".join([line.strip() for line in extended_desc if line.strip()])
+        
+        transactions.append([
+            date.strip(),
+            value_date.strip(),
+            final_desc.strip(),
+            debit.replace(',', '') if debit else "0.00",
+            credit.replace(',', '') if credit else "0.00",
+            balance.replace(',', '') if balance else "0.00",
+        ])
     return transactions
 
 # ---------------------------
