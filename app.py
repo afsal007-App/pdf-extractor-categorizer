@@ -22,36 +22,42 @@ def extract_fab_transactions(pdf_file):
     transactions = []
     combined_text = ""
     
-    with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                combined_text += text + "\n"
+    # Convert BytesIO to a temporary file for PyMuPDF
+    temp_pdf_path = "temp_fab_statement.pdf"
+    with open(temp_pdf_path, "wb") as temp_pdf:
+        temp_pdf.write(pdf_file.read())
     
-    st.write("📄 Extracted Text from FAB PDF:")
-    st.code(combined_text[:500])  # Show first 500 characters for debugging
-
+    # Extract text using PyMuPDF (fitz)
+    doc = fitz.open(temp_pdf_path)
+    combined_text += "\n".join([page.get_text("text") for page in doc])
+    doc.close()
+    
+    # Extract text using pdfplumber
+    pdf_file.seek(0)
+    with pdfplumber.open(pdf_file) as pdf:
+        combined_text += "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+    
+    # Extract full descriptions using regex with multi-line support
     full_desc_pattern = re.compile(
         r"(\d{2} \w{3} \d{4})\s+(\d{2} \w{3} \d{4})\s+(.+?)\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})?\s+([\d,]*\.\d{2})",
         re.MULTILINE,
     )
 
     matches = list(full_desc_pattern.finditer(combined_text))
-    st.write(f"🔍 Found {len(matches)} matching transactions in FAB PDF.")
 
     for match in matches:
         date, value_date, description, debit, credit, balance = match.groups()
         transactions.append([
-            date.strip() if date else "",
-            value_date.strip() if value_date else "",
-            description.strip() if description else "",
-            float(debit.replace(',', '')) if debit else 0.00,
-            float(credit.replace(',', '')) if credit else 0.00,
-            float(balance.replace(',', '')) if balance else 0.00,
-            "",
-            float(balance.replace(',', '')) if balance else 0.00,
-            0.00,
-            0.00
+            date.strip() if date else "",  # Date
+            value_date.strip() if value_date else "",  # Value Date
+            description.strip() if description else "",  # Full Description
+            float(debit.replace(',', '')) if debit else 0.00,  # Debit
+            float(credit.replace(',', '')) if credit else 0.00,  # Credit
+            float(balance.replace(',', '')) if balance else 0.00,  # Balance
+            "",  # Placeholder for Source File
+            float(balance.replace(',', '')) if balance else 0.00,  # Extracted Balance
+            0.00,  # Placeholder for Amount Column
+            0.00  # Placeholder for FAB Running Balance
         ])
     return transactions
 
@@ -100,12 +106,6 @@ def extract_wio_transactions(pdf_file):
 st.set_page_config(page_title="PDF & Excel Categorization Tool", layout="wide")
 tabs = st.tabs(["PDF to Excel Converter", "Categorization"])
 
-# Dictionary to store transactions for different banks
-bank_dfs = {
-    "FAB": pd.DataFrame(),
-    "Wio Bank": pd.DataFrame(),
-}
-
 with tabs[0]:
     st.header("PDF to Excel Converter")
     
@@ -114,7 +114,8 @@ with tabs[0]:
     
     if uploaded_pdfs:
         opening_balance = st.number_input("Enter Opening Balance:", value=0.0, step=0.01)
-        
+        all_transactions = []
+
         with st.spinner("Extracting transactions..."):
             for file in uploaded_pdfs:
                 if bank_selection == "FAB (First Abu Dhabi Bank)":
@@ -123,16 +124,27 @@ with tabs[0]:
                     if not df_fab.empty:
                         df_fab["Amount"] = df_fab["Extracted Balance"].diff().fillna(df_fab["Extracted Balance"].iloc[0] - opening_balance)
                         df_fab["FAB Running Balance"] = opening_balance + df_fab["Amount"].cumsum()
-                    bank_dfs["FAB"] = pd.concat([bank_dfs["FAB"], df_fab], ignore_index=True)
                 elif bank_selection == "Wio Bank":
                     transactions = extract_wio_transactions(file)
                     df_wio = pd.DataFrame(transactions, columns=["Date", "Ref. Number", "Description", "Amount (Incl. VAT)", "Running Balance (Extracted)", "Source File"])
-                    bank_dfs["Wio Bank"] = pd.concat([bank_dfs["Wio Bank"], df_wio], ignore_index=True)
-        
-        # Display extracted transactions preview
-        st.subheader("Extracted Transactions Preview")
-        if bank_selection in bank_dfs and not bank_dfs[bank_selection].empty:
-            st.write(f"✅ Previewing {len(bank_dfs[bank_selection])} transactions for {bank_selection}.")
-            st.dataframe(bank_dfs[bank_selection].head(50), use_container_width=True)
+                all_transactions.extend(transactions)
+
+        if all_transactions:
+            st.success("Transactions extracted successfully!")
+            if bank_selection == "FAB (First Abu Dhabi Bank)":
+                st.dataframe(df_fab, use_container_width=True)
+            elif bank_selection == "Wio Bank":
+                st.dataframe(df_wio, use_container_width=True)
+            
+            output = io.BytesIO()
+            df_fab.to_excel(output, index=False) if bank_selection == "FAB (First Abu Dhabi Bank)" else df_wio.to_excel(output, index=False)
+            output.seek(0)
+            
+            st.download_button(
+                label="⬇️ Download Converted Excel",
+                data=output,
+                file_name="converted_transactions.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         else:
-            st.warning(f"No transactions available for preview under {bank_selection}. Upload a PDF and try again.")
+            st.warning("No transactions found.")
