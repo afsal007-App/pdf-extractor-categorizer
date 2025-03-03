@@ -22,8 +22,9 @@ def extract_wio_transactions(pdf_file):
     transactions = []
     date_pattern = r'(\d{2}/\d{2}/\d{4})'
     amount_pattern = r'(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'
-
-    with pdfplumber.open(pdf_file) as pdf:
+    
+    pdf_file.seek(0)
+    with pdfplumber.open(io.BytesIO(pdf_file.read())) as pdf:
         for page in pdf.pages:
             text = page.extract_text()
             if not text:
@@ -63,16 +64,8 @@ def extract_fab_transactions(pdf_file):
     transactions = []
     combined_text = ""
     
-    temp_pdf_path = "temp_fab_statement.pdf"
-    with open(temp_pdf_path, "wb") as temp_pdf:
-        temp_pdf.write(pdf_file.read())
-    
-    doc = fitz.open(temp_pdf_path)
-    combined_text += "\n".join([page.get_text("text") for page in doc])
-    doc.close()
-    
     pdf_file.seek(0)
-    with pdfplumber.open(pdf_file) as pdf:
+    with pdfplumber.open(io.BytesIO(pdf_file.read())) as pdf:
         combined_text += "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
     
     full_desc_pattern = re.compile(
@@ -107,12 +100,7 @@ def extract_emirates_nbd_transactions(pdf_file):
     combined_text = ""
     
     pdf_file.seek(0)
-    reader = PyPDF2.PdfReader(pdf_file)
-    for page in reader.pages:
-        combined_text += page.extract_text() + "\n"
-    
-    pdf_file.seek(0)
-    with pdfplumber.open(pdf_file) as pdf:
+    with pdfplumber.open(io.BytesIO(pdf_file.read())) as pdf:
         for page in pdf.pages:
             extracted_text = page.extract_text()
             if extracted_text:
